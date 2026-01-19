@@ -3,22 +3,23 @@ import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { Task } from '../types';
+import { Task, TaskCategory } from '../types';
 
 interface TaskState {
     tasks: Task[];
-    addTask: (text: string, date: string) => void;
+    addTask: (text: string, date: string, category?: TaskCategory) => void;
     toggleTask: (id: string) => void;
     deleteTask: (id: string) => void;
     updateTask: (id: string, text: string) => void;
-    setReminderId: (id: string, reminderId: string) => void;
+    setReminderId: (id: string, reminderId: string, reminderDate: number) => void;
+    updateCategory: (id: string, category: TaskCategory) => void;
 }
 
 export const useTaskStore = create<TaskState>()(
     persist(
         (set) => ({
             tasks: [],
-            addTask: (text, date) =>
+            addTask: (text, date, category = 'none') =>
                 set((state) => ({
                     tasks: [
                         ...state.tasks,
@@ -28,6 +29,7 @@ export const useTaskStore = create<TaskState>()(
                             date,
                             status: 'pending',
                             createdAt: Date.now(),
+                            category,
                         },
                     ],
                 })),
@@ -49,10 +51,16 @@ export const useTaskStore = create<TaskState>()(
                         task.id === id ? { ...task, text } : task
                     ),
                 })),
-            setReminderId: (id, reminderId) =>
+            setReminderId: (id, reminderId, reminderDate) =>
                 set((state) => ({
                     tasks: state.tasks.map((task) =>
-                        task.id === id ? { ...task, reminderId } : task
+                        task.id === id ? { ...task, reminderId, reminderDate } : task
+                    ),
+                })),
+            updateCategory: (id, category) =>
+                set((state) => ({
+                    tasks: state.tasks.map((task) =>
+                        task.id === id ? { ...task, category } : task
                     ),
                 })),
         }),

@@ -40,14 +40,18 @@ const ReminderBottomSheet = forwardRef<BottomSheet, ReminderBottomSheetProps>(
             []
         );
 
-        // Reset state when modal opens
+        // Sync task text whenever it changes
+        useEffect(() => {
+            setTaskInputText(taskText);
+        }, [taskText]);
+
+        // Reset date and picker mode when modal opens
         useEffect(() => {
             if (isOpen) {
-                setTaskInputText(taskText);
                 setSelectedDate(new Date());
                 setActivePickerMode(null);
             }
-        }, [isOpen, taskText]);
+        }, [isOpen]);
 
         // Keyboard handling
         useEffect(() => {
@@ -125,16 +129,6 @@ const ReminderBottomSheet = forwardRef<BottomSheet, ReminderBottomSheetProps>(
                     contentContainerStyle={styles.scrollContent}
                     keyboardShouldPersistTaps="handled"
                 >
-                    {/* Header */}
-                    <View style={styles.header}>
-                        <Pressable onPress={onCancel} hitSlop={20}>
-                            <Text style={styles.cancelButton}>İptal</Text>
-                        </Pressable>
-                        <Pressable onPress={handleSave} style={styles.saveButton}>
-                            <Text style={styles.saveButtonText}>Kaydet</Text>
-                        </Pressable>
-                    </View>
-
                     {/* Task Input */}
                     <View style={styles.inputSection}>
                         <BottomSheetTextInput
@@ -226,6 +220,16 @@ const ReminderBottomSheet = forwardRef<BottomSheet, ReminderBottomSheetProps>(
                         </View>
                     </View>
                 </BottomSheetScrollView>
+
+                {/* Fixed Header at Bottom */}
+                <View style={[styles.fixedHeader, { paddingBottom: Platform.OS === 'ios' ? 32 : 24 }]}>
+                    <Pressable onPress={onCancel} hitSlop={20} style={styles.cancelButtonContainer}>
+                        <Text style={styles.cancelButton}>İptal</Text>
+                    </Pressable>
+                    <Pressable onPress={handleSave} style={styles.saveButton}>
+                        <Text style={styles.saveButtonText}>Kaydet</Text>
+                    </Pressable>
+                </View>
             </BottomSheet>
         );
     }
@@ -247,14 +251,21 @@ const styles = StyleSheet.create({
         paddingHorizontal: 24,
     },
     scrollContent: {
-        paddingBottom: 400, // Extra padding for scroll
+        paddingBottom: 120, // Extra padding for fixed header at bottom
     },
-    header: {
+    fixedHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingVertical: 16,
-        marginBottom: 8,
+        paddingHorizontal: 24,
+        paddingTop: 16,
+        paddingBottom: 32,
+        backgroundColor: Colors.sheetDark,
+        borderTopWidth: 1,
+        borderTopColor: Colors.white + '08',
+    },
+    cancelButtonContainer: {
+        padding: 8,
     },
     cancelButton: {
         fontSize: 16,

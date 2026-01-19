@@ -1,5 +1,7 @@
 export type TaskStatus = 'pending' | 'completed';
 
+export type TaskCategory = 'work' | 'personal' | 'shopping' | 'urgent' | 'none';
+
 export interface Task {
     id: string;
     text: string;
@@ -8,4 +10,19 @@ export interface Task {
     createdAt: number;
     reminderId?: string; // Notification ID
     reminderDate?: number; // Timestamp for when the reminder triggers
+    category: TaskCategory;
+}
+
+export type MoodType = 'very-sad' | 'sad' | 'neutral' | 'happy' | 'very-happy';
+
+export interface MoodEntry {
+    date: string; // ISO Date string YYYY-MM-DD
+    mood: MoodType;
+    timestamp: number;
+}
+
+export interface StreakData {
+    currentStreak: number;
+    longestStreak: number;
+    lastCompletionDate: string; // ISO Date string
 }
