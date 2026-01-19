@@ -3,7 +3,6 @@ import ReminderBottomSheet from '@/components/ReminderBottomSheet';
 import { Colors } from '@/constants/Colors';
 import { useTaskStore } from '@/store/taskStore';
 import { cancelNotification, schedulePushNotification } from '@/utils/notifications';
-import { Ionicons } from '@expo/vector-icons';
 import BottomSheet from '@gorhom/bottom-sheet';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { addDays, differenceInCalendarDays } from 'date-fns';
@@ -91,26 +90,14 @@ export default function HomeScreen() {
     const selectedTask = selectedTaskId ? tasks.find(t => t.id === selectedTaskId) : null;
 
     const handleDateSelect = (event: any, selectedDate?: Date) => {
-        if (Platform.OS === 'android') {
+        if (selectedDate) {
             setShowDatePicker(false);
-            if (selectedDate) {
-                const diff = differenceInCalendarDays(selectedDate, initialDate);
-                const newPage = initialPage + diff;
-                goToPage(newPage);
-            }
+            const diff = differenceInCalendarDays(selectedDate, initialDate);
+            const newPage = initialPage + diff;
+            goToPage(newPage);
         } else {
-            // iOS: Just update temp date, don't close until confirmed
-            if (selectedDate) {
-                setTempDate(selectedDate);
-            }
+            setShowDatePicker(false);
         }
-    };
-
-    const handleIOSDateConfirm = () => {
-        const diff = differenceInCalendarDays(tempDate, initialDate);
-        const newPage = initialPage + diff;
-        goToPage(newPage);
-        setShowDatePicker(false);
     };
 
     const handleGoToToday = () => {
@@ -159,22 +146,15 @@ export default function HomeScreen() {
                                 date={date}
                                 onOpenReminder={handleOpenReminder}
                                 onGoToToday={handleGoToToday}
+                                onOpenCalendar={() => {
+                                    setTempDate(date);
+                                    setShowDatePicker(true);
+                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                }}
                             />
                         );
                     })}
                 </PagerView>
-
-                {/* Calendar Button */}
-                <Pressable
-                    style={[styles.calendarButton, { top: insets.top + 15 }]}
-                    onPress={() => {
-                        setTempDate(addDays(initialDate, activePage - initialPage));
-                        setShowDatePicker(true);
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    }}
-                >
-                    <Ionicons name="calendar-outline" size={24} color={Colors.textLight} />
-                </Pressable>
 
                 {/* Date Picker (Modal for iOS, Inline for Android) */}
                 {showDatePicker && (
@@ -189,9 +169,6 @@ export default function HomeScreen() {
                                 <Pressable style={styles.modalContent} onPress={e => e.stopPropagation()}>
                                     <View style={styles.modalHeader}>
                                         <Text style={styles.modalTitle}>Tarihe Git</Text>
-                                        <Pressable onPress={handleIOSDateConfirm}>
-                                            <Text style={styles.modalConfirm}>Git</Text>
-                                        </Pressable>
                                     </View>
                                     <DateTimePicker
                                         value={tempDate}
@@ -266,7 +243,7 @@ const styles = StyleSheet.create({
     modalHeader: {
         width: '100%',
         flexDirection: 'row',
-        justifyContent: 'space-between',
+        justifyContent: 'center',
         alignItems: 'center',
         marginBottom: 16,
     },

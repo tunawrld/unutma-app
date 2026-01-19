@@ -12,9 +12,10 @@ interface DayViewProps {
     date: Date;
     onOpenReminder: (taskId: string) => void;
     onGoToToday?: () => void;
+    onOpenCalendar?: () => void;
 }
 
-function DayView({ date, onOpenReminder, onGoToToday }: DayViewProps) {
+function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar }: DayViewProps) {
     const dateKey = format(date, 'yyyy-MM-dd');
     const tasks = useTaskStore((state) => state.tasks);
     const addTask = useTaskStore((state) => state.addTask);
@@ -130,7 +131,7 @@ function DayView({ date, onOpenReminder, onGoToToday }: DayViewProps) {
         <KeyboardAvoidingView
             style={styles.container}
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            keyboardVerticalOffset={0}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 30}
         >
             {/* Main Title with Date */}
             <View style={styles.titleSection}>
@@ -149,6 +150,9 @@ function DayView({ date, onOpenReminder, onGoToToday }: DayViewProps) {
                 )}
                 <Text style={styles.title}>{headerTitle}</Text>
                 <Text style={styles.dateText}>{dateDisplay}</Text>
+                <Pressable style={styles.calendarButton} onPress={onOpenCalendar}>
+                    <Ionicons name="calendar-outline" size={24} color={Colors.textLight} />
+                </Pressable>
             </View>
 
             {/* Task List */}
@@ -156,6 +160,16 @@ function DayView({ date, onOpenReminder, onGoToToday }: DayViewProps) {
                 ref={flatListRef}
                 data={dayTasks}
                 keyExtractor={(item) => item.id}
+                initialNumToRender={10}
+                maxToRenderPerBatch={10}
+                windowSize={5}
+                removeClippedSubviews={false}
+                ListEmptyComponent={
+                    <View style={styles.emptyContainer}>
+                        <Ionicons name="sparkles-outline" size={48} color={Colors.textMuted + '40'} />
+                        <Text style={styles.emptyText}>Henüz bir plan yok</Text>
+                    </View>
+                }
                 renderItem={({ item }) => (
                     <TaskItem
                         task={item}
@@ -168,7 +182,7 @@ function DayView({ date, onOpenReminder, onGoToToday }: DayViewProps) {
                     />
                 )}
                 style={styles.list}
-                contentContainerStyle={styles.listContent}
+                contentContainerStyle={[styles.listContent, dayTasks.length === 0 && styles.listContentEmpty]}
                 keyboardShouldPersistTaps="handled"
                 keyboardDismissMode="on-drag"
                 onScrollToIndexFailed={() => { }}
@@ -267,18 +281,26 @@ const styles = StyleSheet.create({
     },
     bottomInputContainer: {
         paddingHorizontal: 24,
-        paddingVertical: 40,
+        paddingVertical: 24,
+        width: '100%',
     },
     inputPlaceholder: {
+        alignSelf: 'center',
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 12,
+        gap: 10,
+        backgroundColor: Colors.white + '0B',
+        paddingVertical: 16,
+        paddingHorizontal: 32,
+        borderRadius: 40,
+        borderWidth: 1,
+        borderColor: Colors.white + '0D',
     },
     inputPlaceholderText: {
-        fontSize: 17,
-        fontWeight: '300',
-        fontStyle: 'italic',
-        color: Colors.textMuted + '80',
+        fontSize: 16,
+        fontWeight: '500',
+        color: Colors.textMuted,
+        letterSpacing: 0.5,
     },
     inputActive: {
         minHeight: 40,
@@ -286,22 +308,44 @@ const styles = StyleSheet.create({
     input: {
         color: Colors.textLight,
         fontSize: 17,
-        fontWeight: '300',
-        fontStyle: 'italic',
+        fontWeight: '400',
+    },
+    calendarButton: {
+        position: 'absolute',
+        right: 24,
+        top: 23,
+        zIndex: 10,
     },
     goToTodayButton: {
         position: 'absolute',
         left: 24,
-        top: 23, // Aligned with calendar icon center
+        top: 23,
         zIndex: 10,
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 2, // Tighter gap
-        paddingVertical: 4, // Smaller padding
+        gap: 2,
+        paddingVertical: 4,
     },
     goToTodayText: {
-        fontSize: 12, // Smaller font
+        fontSize: 12,
         fontWeight: '600',
         color: Colors.primary,
+    },
+    listContentEmpty: {
+        flex: 1,
+        justifyContent: 'center',
+        paddingBottom: 0,
+    },
+    emptyContainer: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        opacity: 0.8,
+        transform: [{ translateY: -40 }],
+    },
+    emptyText: {
+        fontSize: 16,
+        color: Colors.textMuted,
+        marginTop: 12,
+        fontWeight: '500',
     },
 });

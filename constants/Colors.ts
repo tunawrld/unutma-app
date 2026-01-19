@@ -6,4 +6,6 @@ export const Colors = {
     textMuted: '#6E6E73',
     white: '#FFFFFF',
     black: '#000000',
+    red: '#FF453A',
+    yellow: '#FFD60A',
 };

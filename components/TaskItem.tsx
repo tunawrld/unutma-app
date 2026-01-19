@@ -2,7 +2,7 @@ import { Colors } from '@/constants/Colors';
 import { Task } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 interface TaskItemProps {
@@ -20,6 +20,12 @@ const ITEM_HEIGHT = 56;
 function TaskItem({ task, onToggle, onDelete, onLongPress, onUpdate, onEditStart, onEditEnd }: TaskItemProps) {
     const [isEditing, setIsEditing] = useState(false);
     const [editText, setEditText] = useState(task.text);
+    const [now, setNow] = useState(Date.now());
+
+    useEffect(() => {
+        const interval = setInterval(() => setNow(Date.now()), 10000); // Check every 10s for updates
+        return () => clearInterval(interval);
+    }, []);
 
     const handleToggle = () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -38,12 +44,44 @@ function TaskItem({ task, onToggle, onDelete, onLongPress, onUpdate, onEditStart
     };
 
     const handleSaveEdit = () => {
-        if (editText.trim()) {
-            onUpdate(task.id, editText.trim());
+        const trimmedText = editText.trim();
+        if (trimmedText) {
+            onUpdate(task.id, trimmedText);
+        } else {
+            // If text is cleared, delete the task
+            onDelete(task.id);
         }
         setIsEditing(false);
         onEditEnd?.();
     };
+
+    // Only show reminder if we have a date and it's in the future
+    // 'now' comes from state for auto-updates
+    const hasReminder = !!task.reminderId && !!task.reminderDate;
+    const showReminder = hasReminder;
+
+    let timeLeft = '';
+    let reminderColor = Colors.primary;
+    let iconName: keyof typeof Ionicons.glyphMap = 'alarm-outline';
+
+    if (showReminder && task.reminderDate) {
+        if (task.reminderDate <= now) {
+            // Expired
+            reminderColor = Colors.textMuted;
+            timeLeft = 'Süre Doldu';
+            iconName = 'checkmark-circle-outline';
+        } else {
+            const diffMins = Math.ceil((task.reminderDate - now) / 60000);
+
+            if (diffMins <= 60) reminderColor = Colors.red;
+            else if (diffMins <= 360) reminderColor = Colors.yellow;
+            else reminderColor = Colors.primary; // Green/Safe
+
+            if (diffMins < 60) timeLeft = `${diffMins}dk`;
+            else if (diffMins < 24 * 60) timeLeft = `${Math.floor(diffMins / 60)}sa`;
+            else timeLeft = `${Math.floor(diffMins / (24 * 60))}g`;
+        }
+    }
 
     return (
         <View style={styles.taskContainer}>
@@ -89,8 +127,11 @@ function TaskItem({ task, onToggle, onDelete, onLongPress, onUpdate, onEditStart
                         </Text>
 
                         {/* Reminder Indicator */}
-                        {!!task.reminderId && (
-                            <Ionicons name="alarm-outline" size={16} color={Colors.textMuted} style={{ marginLeft: 8 }} />
+                        {showReminder && (
+                            <View style={[styles.reminderContainer, { backgroundColor: reminderColor + '15' }]}>
+                                <Text style={[styles.reminderText, { color: reminderColor }]}>{timeLeft}</Text>
+                                <Ionicons name={iconName} size={14} color={reminderColor} />
+                            </View>
                         )}
                     </Pressable>
                 )}
@@ -137,15 +178,15 @@ const styles = StyleSheet.create({
         height: 24,
         borderRadius: 12,
         borderWidth: 1.5,
-        borderColor: Colors.textMuted + '50', // 30% opacity
+        borderColor: Colors.textMuted + '50',
         marginRight: 16,
         justifyContent: 'center',
         alignItems: 'center',
         backgroundColor: 'transparent',
     },
     checkboxCompleted: {
-        backgroundColor: Colors.primary + '33', // 20% opacity
-        borderColor: Colors.primary + '50', // 30% opacity
+        backgroundColor: Colors.primary + '33',
+        borderColor: Colors.primary + '50',
     },
     taskText: {
         color: Colors.textLight,
@@ -157,9 +198,19 @@ const styles = StyleSheet.create({
     taskTextCompleted: {
         color: Colors.textMuted,
         textDecorationLine: 'line-through',
-        textDecorationColor: Colors.primary + '66', // 40% opacity
+        textDecorationColor: Colors.primary + '66',
+    },
+    reminderContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginLeft: 8,
+        gap: 4,
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 8,
+    },
+    reminderText: {
+        fontSize: 11,
+        fontWeight: '700',
     },
 });
-
-
-
