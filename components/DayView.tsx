@@ -1,6 +1,7 @@
 import { Colors } from '@/constants/Colors';
 // Smart Parsing Logic V3 Implemented
 import { useTaskStore } from '@/store/taskStore';
+import { RecurrenceType } from '@/types';
 import { schedulePushNotification } from '@/utils/notifications';
 import { Ionicons } from '@expo/vector-icons';
 import { addDays, addMonths, addWeeks, addYears, differenceInCalendarDays, format, isToday, isTomorrow, isYesterday, setHours, setMinutes } from 'date-fns';
@@ -8,6 +9,7 @@ import { tr } from 'date-fns/locale';
 import * as Haptics from 'expo-haptics';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Animated, FlatList, Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import OverdueModal from './OverdueModal';
 import TaskItem from './TaskItem';
 
 interface DayViewProps {
@@ -16,9 +18,10 @@ interface DayViewProps {
     onGoToToday?: () => void;
     onOpenCalendar?: () => void;
     onTaskComplete?: () => void;
+    onDeleteTask?: (taskId: string) => void;
 }
 
-function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar, onTaskComplete }: DayViewProps) {
+function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar, onTaskComplete, onDeleteTask }: DayViewProps) {
     const dateKey = format(date, 'yyyy-MM-dd');
     const tasks = useTaskStore((state) => state.tasks);
     const addTask = useTaskStore((state) => state.addTask);
@@ -26,6 +29,10 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar, onTaskComp
     const deleteTask = useTaskStore((state) => state.deleteTask);
     const updateTask = useTaskStore((state) => state.updateTask);
     const setReminderId = useTaskStore((state) => state.setReminderId);
+    const moveTaskToDate = useTaskStore((state) => state.moveTaskToDate);
+    const restoreLastDeletedTask = useTaskStore((state) => state.restoreLastDeletedTask);
+
+    const [showOverdueModal, setShowOverdueModal] = useState(false);
 
     const handleToggleTask = (id: string) => {
         const task = tasks.find(t => t.id === id);
@@ -37,6 +44,42 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar, onTaskComp
             onTaskComplete();
         }
     };
+
+    // --- Undo Logic (Toast) ---
+    const [showUndo, setShowUndo] = useState(false);
+    const undoOpacity = useRef(new Animated.Value(0)).current;
+
+    const handleDeleteWithUndo = (id: string) => {
+        deleteTask(id);
+        setShowUndo(true);
+        // Reset opacity before animating
+        undoOpacity.setValue(0);
+
+        Animated.timing(undoOpacity, {
+            toValue: 1,
+            duration: 300,
+            useNativeDriver: true,
+        }).start();
+
+        // Auto hide after 4 seconds
+        setTimeout(() => {
+            Animated.timing(undoOpacity, {
+                toValue: 0,
+                duration: 300,
+                useNativeDriver: true,
+            }).start(() => setShowUndo(false));
+        }, 4000);
+    };
+
+    const handleUndo = () => {
+        restoreLastDeletedTask();
+        Animated.timing(undoOpacity, {
+            toValue: 0,
+            duration: 200,
+            useNativeDriver: true,
+        }).start(() => setShowUndo(false));
+    };
+    // -------------------------
 
     const [newTaskText, setNewTaskText] = useState('');
     const [isInputFocused, setIsInputFocused] = useState(false);
@@ -50,6 +93,20 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar, onTaskComp
     const dayTasks = useMemo(() =>
         tasks.filter((t) => t.date === dateKey).sort((a, b) => a.createdAt - b.createdAt),
         [tasks, dateKey]);
+
+    // Overdue Tasks Logic (Only for Today)
+    const overdueTasks = useMemo(() => {
+        if (!isToday(date)) return [];
+        return tasks.filter(t => t.date < dateKey && t.status === 'pending');
+    }, [tasks, date, dateKey]);
+
+    const handleMoveOverdueToToday = () => {
+        overdueTasks.forEach(task => {
+            moveTaskToDate(task.id, dateKey);
+        });
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setShowOverdueModal(false);
+    };
 
     let headerTitle = format(date, 'EEEE', { locale: tr });
     if (isToday(date)) headerTitle = 'Bugün';
@@ -73,6 +130,7 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar, onTaskComp
         let targetDate = date;
         let reminderDate: Date | null = null;
         let finalTaskText = originalText;
+        let recurrence: RecurrenceType = null;
 
         const now = new Date();
 
@@ -80,6 +138,15 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar, onTaskComp
         const isForContext = (text: string, keyword: string) => {
             return text.includes(`${keyword} için`) || text.includes(`için ${keyword}`);
         };
+
+        // 0. Recurrence Detection
+        if (lowerText.includes('her gün')) {
+            recurrence = 'daily';
+        } else if (lowerText.includes('her hafta')) {
+            recurrence = 'weekly';
+        } else if (lowerText.includes('her ay')) {
+            recurrence = 'monthly';
+        }
 
         // 1. TARİH TESPİTİ (Gelişmiş versiyon)
         let dayFound = false;
@@ -94,22 +161,34 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar, onTaskComp
             'pazartesi': 1, 'salı': 2, 'çarşamba': 3, 'perşembe': 4, 'cuma': 5, 'cumartesi': 6, 'pazar': 0
         };
 
+        // Haftasonu Logic
+        if ((lowerText.includes('hafta sonu') || lowerText.includes('haftasonu')) && !isForContext(lowerText, 'haftasonu')) {
+            const currentDay = now.getDay(); // 0-6
+            // Cumartesi (6) hedefliyoruz
+            let daysToSat = (6 - currentDay + 7) % 7;
+            if (daysToSat === 0 && weekOffset === 0) daysToSat = 7; // Bugün Cmt ise haftaya at
+            targetDate = addDays(now, daysToSat + (weekOffset * 7));
+            dayFound = true;
+        }
+
         // Gün isimlerini kontrol et ve Offset ile birleştir
-        for (const [dayName, dayIndex] of Object.entries(daysMap)) {
-            if (lowerText.includes(dayName) && !isForContext(lowerText, dayName)) {
-                const currentDay = now.getDay();
-                let daysToAdd = (dayIndex - currentDay + 7) % 7;
+        if (!dayFound) {
+            for (const [dayName, dayIndex] of Object.entries(daysMap)) {
+                if (lowerText.includes(dayName) && !isForContext(lowerText, dayName)) {
+                    const currentDay = now.getDay();
+                    let daysToAdd = (dayIndex - currentDay + 7) % 7;
 
-                // Eğer gün bugünse ve weekOffset yoksa, "gelecek [gün]" kastedilmiştir (7 gün sonra)
-                // Ama weekOffset varsa (Haftaya Pazartesi), o zaman 0 + 7 = 7 gün sonra olur ki bu doğrudur.
-                if (daysToAdd === 0 && weekOffset === 0) {
-                    daysToAdd = 7;
+                    // Eğer gün bugünse ve weekOffset yoksa, "gelecek [gün]" kastedilmiştir (7 gün sonra)
+                    // Ama weekOffset varsa (Haftaya Pazartesi), o zaman 0 + 7 = 7 gün sonra olur ki bu doğrudur.
+                    if (daysToAdd === 0 && weekOffset === 0) {
+                        daysToAdd = 7;
+                    }
+
+                    // Offset'i ekle (Haftaya Salı = En yakın Salı + 7 gün)
+                    targetDate = addDays(now, daysToAdd + (weekOffset * 7));
+                    dayFound = true;
+                    break;
                 }
-
-                // Offset'i ekle (Haftaya Salı = En yakın Salı + 7 gün)
-                targetDate = addDays(now, daysToAdd + (weekOffset * 7));
-                dayFound = true;
-                break;
             }
         }
 
@@ -121,7 +200,14 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar, onTaskComp
             } else if (lowerText.includes('yarın') && !isForContext(lowerText, 'yarın')) {
                 targetDate = addDays(now, 1);
             } else if ((lowerText.includes('ertesi gün') || lowerText.includes('yarından sonra')) && !isForContext(lowerText, 'ertesi gün')) {
-                targetDate = addDays(now, 2);
+                // Ertesi gün = Yarın (+1) diyerek standartlaştırıyoruz, kullanıcı kafa karışıklığını önlemek için.
+                // Ancak "yarından sonra" kesinlikle +2'dir.
+                if (lowerText.includes('yarından sonra')) {
+                    targetDate = addDays(now, 2);
+                } else {
+                    // 'ertesi gün' -> +1 (Yarın ile aynı, güvenli liman)
+                    targetDate = addDays(now, 1);
+                }
             } else if ((lowerText.includes('gelecek ay') || lowerText.includes('öbür ay')) && !isForContext(lowerText, 'gelecek ay')) {
                 targetDate = addMonths(now, 1);
             } else if ((lowerText.includes('seneye') || lowerText.includes('gelecek yıl')) && !isForContext(lowerText, 'seneye')) {
@@ -195,8 +281,8 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar, onTaskComp
         // Target Date Key'i güncelle
         const targetDateKey = format(targetDate, 'yyyy-MM-dd');
 
-        // Store'a ekle
-        const taskId = addTask(finalTaskText, targetDateKey);
+        // Store'a ekle (Recurrence ile)
+        const taskId = addTask(finalTaskText, targetDateKey, 'none', recurrence);
 
         // Bildirim kur
         if (reminderDate && taskId) {
@@ -220,7 +306,7 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar, onTaskComp
             const dateStr = format(targetDate, 'd MMMM EEEE', { locale: tr });
             Alert.alert(
                 "Planlandı 📅",
-                `"${finalTaskText}" görevi ${dateStr} tarihine eklendi.`,
+                `"${finalTaskText}" görevi ${dateStr} tarihine eklendi.${recurrence ? '\n(Tekrarlayan Görev)' : ''}`,
                 [{ text: "Tamam" }]
             );
         }
@@ -314,44 +400,61 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar, onTaskComp
                         <Text style={styles.goToTodayText}>Bugüne Git</Text>
                     </Pressable>
                 )}
+
                 <Text style={styles.title}>{headerTitle}</Text>
                 <Text style={styles.dateText}>{dateDisplay}</Text>
+
+                {/* Overdue Button - Only show if overdue tasks exist */}
+                {overdueTasks.length > 0 && (
+                    <Pressable
+                        style={styles.overdueButton}
+                        onPress={() => {
+                            Haptics.selectionAsync();
+                            setShowOverdueModal(true);
+                        }}
+                    >
+                        <Ionicons name="time-outline" size={24} color={Colors.white} />
+                    </Pressable>
+                )}
+
                 <Pressable style={styles.calendarButton} onPress={onOpenCalendar}>
                     <Ionicons name="calendar-outline" size={24} color={Colors.textLight} />
                 </Pressable>
             </View>
 
-            <FlatList
-                ref={flatListRef}
-                data={dayTasks}
-                keyExtractor={(item) => item.id}
-                initialNumToRender={10}
-                maxToRenderPerBatch={10}
-                windowSize={5}
-                removeClippedSubviews={false}
-                ListEmptyComponent={
-                    <View style={styles.emptyContainer}>
-                        <Ionicons name="sparkles-outline" size={48} color={Colors.textMuted + '40'} />
-                        <Text style={styles.emptyText}>Henüz bir plan yok</Text>
-                    </View>
-                }
-                renderItem={({ item }) => (
-                    <TaskItem
-                        task={item}
-                        onToggle={handleToggleTask}
-                        onDelete={deleteTask}
-                        onLongPress={handleLongPress}
-                        onUpdate={updateTask}
-                        onEditStart={handleEditStart}
-                        onEditEnd={handleEditEnd}
-                    />
-                )}
-                style={styles.list}
-                contentContainerStyle={[styles.listContent, dayTasks.length === 0 && styles.listContentEmpty]}
-                keyboardShouldPersistTaps="handled"
-                keyboardDismissMode="on-drag"
-                onScrollToIndexFailed={() => { }}
-            />
+            <View style={{ flex: 1 }}>
+                <FlatList
+                    ref={flatListRef}
+                    data={dayTasks}
+                    keyExtractor={(item) => item.id}
+                    initialNumToRender={10}
+                    maxToRenderPerBatch={10}
+                    windowSize={5}
+                    removeClippedSubviews={false}
+                    ListEmptyComponent={
+                        <View style={styles.emptyContainer}>
+                            <Ionicons name="sparkles-outline" size={48} color={Colors.textMuted + '40'} />
+                            <Text style={styles.emptyText}>Henüz bir plan yok</Text>
+                        </View>
+                    }
+                    renderItem={({ item }) => (
+                        <TaskItem
+                            task={item}
+                            onToggle={handleToggleTask}
+                            onDelete={handleDeleteWithUndo}
+                            onLongPress={handleLongPress}
+                            onUpdate={updateTask}
+                            onEditStart={handleEditStart}
+                            onEditEnd={handleEditEnd}
+                        />
+                    )}
+                    style={styles.list}
+                    contentContainerStyle={[styles.listContent, dayTasks.length === 0 && styles.listContentEmpty]}
+                    keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode="on-drag"
+                    onScrollToIndexFailed={() => { }}
+                />
+            </View>
 
             <Animated.View
                 style={[
@@ -369,13 +472,13 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar, onTaskComp
                         onPress={() => setIsInputFocused(true)}
                     >
                         <Ionicons name="add-circle" size={22} color={Colors.primary} />
-                        <Text style={styles.inputPlaceholderText}>Unutmadan yaz</Text>
+                        <Text style={styles.inputPlaceholderText}>Unutmadan yaz...</Text>
                     </Pressable>
                 ) : (
                     <View style={styles.inputActive}>
                         <TextInput
                             style={styles.input}
-                            placeholder="Unutmadan yaz"
+                            placeholder="Unutmadan yaz... (her gün, yarına vb.)"
                             placeholderTextColor={Colors.textMuted + '80'}
                             value={newTaskText}
                             onChangeText={setNewTaskText}
@@ -393,6 +496,13 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar, onTaskComp
                     </View>
                 )}
             </Animated.View>
+
+            <OverdueModal
+                visible={showOverdueModal}
+                tasks={overdueTasks}
+                onClose={() => setShowOverdueModal(false)}
+                onMoveAllToToday={handleMoveOverdueToToday}
+            />
         </KeyboardAvoidingView>
     );
 }
@@ -428,11 +538,6 @@ const styles = StyleSheet.create({
         lineHeight: 38,
         textAlign: 'center',
     },
-    subtitle: {
-        fontSize: 14,
-        color: Colors.textMuted,
-        marginTop: 4,
-    },
     list: {
         flex: 1,
         paddingHorizontal: 24,
@@ -442,7 +547,8 @@ const styles = StyleSheet.create({
     },
     bottomInputContainer: {
         paddingHorizontal: 24,
-        paddingVertical: 24,
+        paddingTop: 24,
+        paddingBottom: 60,
         width: '100%',
     },
     inputPlaceholder: {
@@ -488,6 +594,12 @@ const styles = StyleSheet.create({
         top: 23,
         zIndex: 10,
     },
+    overdueButton: {
+        position: 'absolute',
+        right: 64, // left of calendar button
+        top: 23,
+        zIndex: 10,
+    },
     goToTodayButton: {
         position: 'absolute',
         left: 24,
@@ -520,4 +632,5 @@ const styles = StyleSheet.create({
         marginTop: 12,
         fontWeight: '500',
     },
+
 });

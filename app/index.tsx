@@ -1,9 +1,11 @@
 import ComboOverlay from '@/components/ComboOverlay';
+import DailyQuote from '@/components/DailyQuote';
 import DayView from '@/components/DayView';
 import ReminderBottomSheet from '@/components/ReminderBottomSheet';
 import WelcomeScreen from '@/components/WelcomeScreen';
 import { Colors } from '@/constants/Colors';
 import { useTaskStore } from '@/store/taskStore';
+import { RecurrenceType } from '@/types';
 import { cancelNotification, schedulePushNotification } from '@/utils/notifications';
 import BottomSheet from '@gorhom/bottom-sheet';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -11,7 +13,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { addDays, differenceInCalendarDays, format } from 'date-fns';
 import * as Haptics from 'expo-haptics';
 import React, { useEffect, useRef, useState } from 'react';
-import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import PagerView from 'react-native-pager-view';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -34,6 +36,8 @@ export default function HomeScreen() {
     const setReminderId = useTaskStore((state) => state.setReminderId);
     const moveTaskToDate = useTaskStore((state) => state.moveTaskToDate);
     const deleteTask = useTaskStore((state) => state.deleteTask);
+    const setRecurrence = useTaskStore((state) => state.setRecurrence);
+    const restoreLastDeletedTask = useTaskStore((state) => state.restoreLastDeletedTask);
 
     useEffect(() => {
         if (targetPage !== null && activePage === targetPage) {
@@ -70,6 +74,51 @@ export default function HomeScreen() {
         }
     };
     // -------------------
+
+    // --- Global Undo Logic ---
+    const [showUndo, setShowUndo] = useState(false);
+    const undoOpacity = useRef(new Animated.Value(0)).current;
+
+    const handleGlobalDeleteTask = (id: string) => {
+        deleteTask(id);
+        setShowUndo(true);
+        undoOpacity.setValue(0);
+
+        Animated.timing(undoOpacity, {
+            toValue: 1,
+            duration: 300,
+            useNativeDriver: true,
+        }).start();
+
+        // Auto hide
+        setTimeout(() => {
+            Animated.timing(undoOpacity, {
+                toValue: 0,
+                duration: 300,
+                useNativeDriver: true,
+            }).start(() => setShowUndo(false));
+        }, 4000);
+    };
+
+    const handleGlobalUndo = () => {
+        restoreLastDeletedTask();
+        Animated.timing(undoOpacity, {
+            toValue: 0,
+            duration: 200,
+            useNativeDriver: true,
+        }).start(() => setShowUndo(false));
+    };
+    // ------------------------
+
+    const handleSheetChange = (index: number) => {
+        // -1 means closed, anything else (0, 1, etc.) means open
+        if (index === -1) {
+            setIsSheetOpen(false);
+            setSelectedTaskId(null); // Clean up selection when manually closed
+        } else {
+            setIsSheetOpen(true);
+        }
+    };
 
     useEffect(() => {
         checkFirstLaunch();
@@ -114,10 +163,13 @@ export default function HomeScreen() {
         bottomSheetRef.current?.expand();
     };
 
-    const handleSaveReminder = async (reminderDate: Date) => {
+    const handleSaveReminder = async (reminderDate: Date, recurrence: RecurrenceType) => {
         if (selectedTaskId) {
             const task = tasks.find(t => t.id === selectedTaskId);
             if (task) {
+                // Update Recurrence
+                setRecurrence(selectedTaskId, recurrence);
+
                 if (task.reminderId) {
                     await cancelNotification(task.reminderId);
                 }
@@ -136,7 +188,7 @@ export default function HomeScreen() {
         }
         bottomSheetRef.current?.close();
         setSelectedTaskId(null);
-        setIsSheetOpen(false);
+        setIsSheetOpen(false); // Force close
     };
 
     const handleCancelReminder = () => {
@@ -147,12 +199,12 @@ export default function HomeScreen() {
 
     const handleDeleteTask = () => {
         if (selectedTaskId) {
-            deleteTask(selectedTaskId);
+            handleGlobalDeleteTask(selectedTaskId);
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         }
         bottomSheetRef.current?.close();
         setSelectedTaskId(null);
-        setIsSheetOpen(false);
+        setIsSheetOpen(false); // Force close
     };
 
     const handleMoveToTomorrow = async () => {
@@ -189,7 +241,7 @@ export default function HomeScreen() {
         }
         bottomSheetRef.current?.close();
         setSelectedTaskId(null);
-        setIsSheetOpen(false);
+        setIsSheetOpen(false); // Force close
     };
 
     const handleRemoveReminder = async () => {
@@ -203,7 +255,7 @@ export default function HomeScreen() {
         }
         bottomSheetRef.current?.close();
         setSelectedTaskId(null);
-        setIsSheetOpen(false);
+        setIsSheetOpen(false); // Force close
     };
 
     const selectedTask = selectedTaskId ? tasks.find(t => t.id === selectedTaskId) : null;
@@ -259,6 +311,7 @@ export default function HomeScreen() {
                                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                                 }}
                                 onTaskComplete={handleTaskComplete}
+                                onDeleteTask={handleGlobalDeleteTask}
                             />
                         );
                     })}
@@ -302,16 +355,20 @@ export default function HomeScreen() {
                 )}
             </SafeAreaView>
 
+            <DailyQuote />
+
             <ReminderBottomSheet
                 ref={bottomSheetRef}
                 isOpen={isSheetOpen}
                 taskText={selectedTask?.text || ''}
+                existingDate={selectedTask?.reminderDate}
+                existingRecurrence={selectedTask?.recurrence}
                 onSave={handleSaveReminder}
                 onCancel={handleCancelReminder}
                 onDelete={handleDeleteTask}
                 onMoveToTomorrow={handleMoveToTomorrow}
                 onRemoveReminder={handleRemoveReminder}
-                existingDate={selectedTask?.reminderDate}
+                onSheetChange={handleSheetChange}
             />
 
             <ComboOverlay
@@ -319,6 +376,16 @@ export default function HomeScreen() {
                 visible={comboVisible}
                 onAnimationFinish={() => setComboVisible(false)}
             />
+
+            {/* Global Undo Toast */}
+            {showUndo && (
+                <Animated.View style={[styles.undoContainer, { opacity: undoOpacity }]}>
+                    <Text style={styles.undoText}>Görev silindi</Text>
+                    <Pressable onPress={handleGlobalUndo}>
+                        <Text style={styles.undoButton}>Geri Al</Text>
+                    </Pressable>
+                </Animated.View>
+            )}
 
             {isFirstLaunch && <WelcomeScreen onStart={handleWelcomeComplete} />}
         </GestureHandlerRootView>
@@ -389,5 +456,37 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '600',
         color: Colors.primary,
+    },
+    // Global Undo Styles
+    undoContainer: {
+        position: 'absolute',
+        bottom: 80, // Moved up to clear bottom areas
+        alignSelf: 'center',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: '#333',
+        paddingVertical: 12,
+        paddingHorizontal: 20,
+        borderRadius: 30,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 10,
+        width: '90%',
+        maxWidth: 340,
+        zIndex: 99999, // Super high z-index
+    },
+    undoText: {
+        color: '#fff',
+        fontSize: 14,
+        fontWeight: '500',
+    },
+    undoButton: {
+        color: Colors.primary,
+        fontSize: 14,
+        fontWeight: 'bold',
+        marginLeft: 16,
     },
 });

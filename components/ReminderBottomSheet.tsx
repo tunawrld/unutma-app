@@ -1,4 +1,5 @@
 import { Colors } from '@/constants/Colors';
+import { RecurrenceType } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet, { BottomSheetBackdrop, BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -12,18 +13,21 @@ interface ReminderBottomSheetProps {
     taskText: string;
     isOpen?: boolean;
     existingDate?: number;
-    onSave: (date: Date) => void;
+    existingRecurrence?: RecurrenceType;
+    onSave: (date: Date, recurrence: RecurrenceType) => void;
     onCancel: () => void;
     onDelete?: () => void;
     onMoveToTomorrow?: () => void;
     onRemoveReminder?: () => void;
+    onSheetChange?: (index: number) => void;
 }
 
 const ReminderBottomSheet = forwardRef<BottomSheet, ReminderBottomSheetProps>(
-    ({ taskText, onSave, onCancel, isOpen, existingDate, onMoveToTomorrow, onDelete, onRemoveReminder }, ref) => {
+    ({ taskText, onSave, onCancel, isOpen, existingDate, existingRecurrence, onMoveToTomorrow, onDelete, onRemoveReminder, onSheetChange }, ref) => {
         const [snapPoints, setSnapPoints] = useState(['90%']);
         const [selectedDate, setSelectedDate] = useState(new Date());
         const [taskInputText, setTaskInputText] = useState(taskText);
+        const [selectedRecurrence, setSelectedRecurrence] = useState<RecurrenceType>(existingRecurrence || null);
 
         // iOS & Android State unified
         const [activePickerMode, setActivePickerMode] = useState<'date' | 'time' | null>(null);
@@ -53,8 +57,9 @@ const ReminderBottomSheet = forwardRef<BottomSheet, ReminderBottomSheetProps>(
             if (isOpen) {
                 setSelectedDate(new Date());
                 setActivePickerMode(null);
+                setSelectedRecurrence(existingRecurrence || null);
             }
-        }, [isOpen]);
+        }, [isOpen, existingRecurrence]);
 
         // Keyboard handling
         useEffect(() => {
@@ -74,7 +79,7 @@ const ReminderBottomSheet = forwardRef<BottomSheet, ReminderBottomSheetProps>(
 
         const handleSave = () => {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            onSave(selectedDate);
+            onSave(selectedDate, selectedRecurrence);
         };
 
         const handleMoveToTomorrow = () => {
@@ -112,7 +117,12 @@ const ReminderBottomSheet = forwardRef<BottomSheet, ReminderBottomSheetProps>(
             { label: 'Haftaya', action: () => setSelectedDate(addDays(new Date(), 7)) },
         ];
 
-
+        const recurrenceOptions: { label: string, value: RecurrenceType, icon: keyof typeof Ionicons.glyphMap }[] = [
+            { label: 'Tek Seferlik', value: null, icon: 'remove-circle-outline' },
+            { label: 'Her Gün', value: 'daily', icon: 'refresh-outline' },
+            { label: 'Her Hafta', value: 'weekly', icon: 'calendar-outline' },
+            { label: 'Her Ay', value: 'monthly', icon: 'infinite-outline' },
+        ];
 
         // Format logic for Display Card
         let dateLabel = format(selectedDate, 'd MMMM EEEE', { locale: tr });
@@ -126,6 +136,7 @@ const ReminderBottomSheet = forwardRef<BottomSheet, ReminderBottomSheetProps>(
                 ref={ref}
                 index={-1}
                 snapPoints={snapPoints}
+                onChange={onSheetChange}
                 enablePanDownToClose={!activePickerMode} // Disable closing while picking
                 enableContentPanningGesture={!activePickerMode} // Disable sheet pan while picking
                 backdropComponent={renderBackdrop}
@@ -242,6 +253,35 @@ const ReminderBottomSheet = forwardRef<BottomSheet, ReminderBottomSheetProps>(
                                     </View>
                                 </Pressable>
                             ))}
+                        </View>
+
+                        {/* Recurrence Selection */}
+                        <View style={styles.recurrenceSection}>
+                            <Text style={styles.sectionTitle}>Tekrar</Text>
+                            <View style={styles.recurrenceOptions}>
+                                {recurrenceOptions.map((option, index) => {
+                                    const isSelected = selectedRecurrence === option.value;
+                                    return (
+                                        <Pressable
+                                            key={index}
+                                            style={[styles.recurrenceChip, isSelected && styles.recurrenceChipSelected]}
+                                            onPress={() => {
+                                                Haptics.selectionAsync();
+                                                setSelectedRecurrence(option.value);
+                                            }}
+                                        >
+                                            <Ionicons
+                                                name={option.icon}
+                                                size={16}
+                                                color={isSelected ? Colors.backgroundDark : Colors.white}
+                                            />
+                                            <Text style={[styles.recurrenceText, isSelected && styles.recurrenceTextSelected]}>
+                                                {option.label}
+                                            </Text>
+                                        </Pressable>
+                                    );
+                                })}
+                            </View>
                         </View>
 
                         {/* Move to Tomorrow Action */}
@@ -489,6 +529,46 @@ const styles = StyleSheet.create({
         fontSize: 13,
         fontWeight: '500',
         color: Colors.primary + 'AA',
+    },
+    // Recurrence Styles
+    recurrenceSection: {
+        marginTop: 8,
+        gap: 12,
+    },
+    sectionTitle: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: Colors.white + '80',
+        marginLeft: 4,
+    },
+    recurrenceOptions: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+    },
+    recurrenceChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        backgroundColor: Colors.white + '05',
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: Colors.white + '10',
+    },
+    recurrenceChipSelected: {
+        backgroundColor: Colors.primary,
+        borderColor: Colors.primary,
+    },
+    recurrenceText: {
+        fontSize: 13,
+        fontWeight: '500',
+        color: Colors.white,
+    },
+    recurrenceTextSelected: {
+        color: Colors.backgroundDark,
+        fontWeight: '600',
     },
 });
 

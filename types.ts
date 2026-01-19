@@ -2,6 +2,8 @@ export type TaskStatus = 'pending' | 'completed';
 
 export type TaskCategory = 'work' | 'personal' | 'shopping' | 'urgent' | 'none';
 
+export type RecurrenceType = 'daily' | 'weekly' | 'monthly' | null;
+
 export interface Task {
     id: string;
     text: string;
@@ -11,6 +13,7 @@ export interface Task {
     reminderId?: string; // Notification ID
     reminderDate?: number; // Timestamp for when the reminder triggers
     category: TaskCategory;
+    recurrence?: RecurrenceType;
 }
 
 export type MoodType = 'very-sad' | 'sad' | 'neutral' | 'happy' | 'very-happy';

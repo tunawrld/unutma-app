@@ -127,12 +127,20 @@ function TaskItem({ task, onToggle, onDelete, onLongPress, onUpdate, onEditStart
                         </Text>
 
                         {/* Reminder Indicator */}
-                        {showReminder && (
-                            <View style={[styles.reminderContainer, { backgroundColor: reminderColor + '15' }]}>
-                                <Text style={[styles.reminderText, { color: reminderColor }]}>{timeLeft}</Text>
-                                <Ionicons name={iconName} size={14} color={reminderColor} />
-                            </View>
-                        )}
+                        <View style={styles.metaContainer}>
+                            {task.recurrence && (
+                                <View style={styles.recurrenceBadge}>
+                                    <Ionicons name="repeat" size={12} color={Colors.textMuted} />
+                                </View>
+                            )}
+
+                            {showReminder && (
+                                <View style={[styles.reminderContainer, { backgroundColor: reminderColor + '15' }]}>
+                                    <Text style={[styles.reminderText, { color: reminderColor }]}>{timeLeft}</Text>
+                                    <Ionicons name={iconName} size={14} color={reminderColor} />
+                                </View>
+                            )}
+                        </View>
                     </Pressable>
                 )}
             </View>
@@ -203,7 +211,6 @@ const styles = StyleSheet.create({
     reminderContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginLeft: 8,
         gap: 4,
         paddingHorizontal: 6,
         paddingVertical: 2,
@@ -212,5 +219,16 @@ const styles = StyleSheet.create({
     reminderText: {
         fontSize: 11,
         fontWeight: '700',
+    },
+    metaContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        marginLeft: 8,
+    },
+    recurrenceBadge: {
+        padding: 4,
+        backgroundColor: Colors.textMuted + '15',
+        borderRadius: 6,
     },
 });
