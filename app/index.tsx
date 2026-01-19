@@ -1,3 +1,4 @@
+import ComboOverlay from '@/components/ComboOverlay';
 import DayView from '@/components/DayView';
 import ReminderBottomSheet from '@/components/ReminderBottomSheet';
 import WelcomeScreen from '@/components/WelcomeScreen';
@@ -39,6 +40,36 @@ export default function HomeScreen() {
             setTargetPage(null);
         }
     }, [activePage, targetPage]);
+
+    // --- COMBO LOGIC ---
+    const [comboCount, setComboCount] = useState(0);
+    const [comboVisible, setComboVisible] = useState(false);
+    const lastComboTime = useRef(0);
+    const comboCountRef = useRef(0);
+
+    const handleTaskComplete = async () => {
+        const now = Date.now();
+        // Reset combo if more than 2 seconds passed
+        if (now - lastComboTime.current < 2000) {
+            comboCountRef.current += 1;
+        } else {
+            comboCountRef.current = 1;
+        }
+        lastComboTime.current = now;
+
+        setComboCount(comboCountRef.current);
+        setComboVisible(true);
+
+        // Haptic Feedback (increasing intensity)
+        if (comboCountRef.current === 2) {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        } else if (comboCountRef.current === 3) {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        } else if (comboCountRef.current > 3) {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+    };
+    // -------------------
 
     useEffect(() => {
         checkFirstLaunch();
@@ -227,6 +258,7 @@ export default function HomeScreen() {
                                     setShowDatePicker(true);
                                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                                 }}
+                                onTaskComplete={handleTaskComplete}
                             />
                         );
                     })}
@@ -280,6 +312,12 @@ export default function HomeScreen() {
                 onMoveToTomorrow={handleMoveToTomorrow}
                 onRemoveReminder={handleRemoveReminder}
                 existingDate={selectedTask?.reminderDate}
+            />
+
+            <ComboOverlay
+                count={comboCount}
+                visible={comboVisible}
+                onAnimationFinish={() => setComboVisible(false)}
             />
 
             {isFirstLaunch && <WelcomeScreen onStart={handleWelcomeComplete} />}

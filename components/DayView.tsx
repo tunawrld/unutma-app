@@ -15,16 +15,28 @@ interface DayViewProps {
     onOpenReminder: (taskId: string) => void;
     onGoToToday?: () => void;
     onOpenCalendar?: () => void;
+    onTaskComplete?: () => void;
 }
 
-function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar }: DayViewProps) {
+function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar, onTaskComplete }: DayViewProps) {
     const dateKey = format(date, 'yyyy-MM-dd');
     const tasks = useTaskStore((state) => state.tasks);
     const addTask = useTaskStore((state) => state.addTask);
-    const toggleTask = useTaskStore((state) => state.toggleTask);
+    const toggleTaskStore = useTaskStore((state) => state.toggleTask);
     const deleteTask = useTaskStore((state) => state.deleteTask);
     const updateTask = useTaskStore((state) => state.updateTask);
     const setReminderId = useTaskStore((state) => state.setReminderId);
+
+    const handleToggleTask = (id: string) => {
+        const task = tasks.find(t => t.id === id);
+        const isCompleting = task?.status === 'pending';
+
+        toggleTaskStore(id);
+
+        if (isCompleting && onTaskComplete) {
+            onTaskComplete();
+        }
+    };
 
     const [newTaskText, setNewTaskText] = useState('');
     const [isInputFocused, setIsInputFocused] = useState(false);
@@ -326,7 +338,7 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar }: DayViewP
                 renderItem={({ item }) => (
                     <TaskItem
                         task={item}
-                        onToggle={toggleTask}
+                        onToggle={handleToggleTask}
                         onDelete={deleteTask}
                         onLongPress={handleLongPress}
                         onUpdate={updateTask}

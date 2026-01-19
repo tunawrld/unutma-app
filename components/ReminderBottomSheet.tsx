@@ -112,10 +112,7 @@ const ReminderBottomSheet = forwardRef<BottomSheet, ReminderBottomSheetProps>(
             { label: 'Haftaya', action: () => setSelectedDate(addDays(new Date(), 7)) },
         ];
 
-        // Special task management actions
-        const taskActions = [
-            { label: '📅 Yarına Aktar', icon: 'arrow-forward-outline', action: 'moveToTomorrow' },
-        ];
+
 
         // Format logic for Display Card
         let dateLabel = format(selectedDate, 'd MMMM EEEE', { locale: tr });
@@ -494,5 +491,7 @@ const styles = StyleSheet.create({
         color: Colors.primary + 'AA',
     },
 });
+
+ReminderBottomSheet.displayName = 'ReminderBottomSheet';
 
 export default ReminderBottomSheet;
