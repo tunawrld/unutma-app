@@ -110,15 +110,16 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar, onTaskComp
         tasks.filter((t) => t.date === dateKey).sort((a, b) => a.createdAt - b.createdAt),
         [tasks, dateKey]);
 
-    // Overdue Tasks Logic (Only for Today)
+    // Overdue Tasks Logic (Global - Show on all pages if exist)
     const overdueTasks = useMemo(() => {
-        if (!isToday(date)) return [];
-        return tasks.filter(t => t.date < dateKey && t.status === 'pending');
-    }, [tasks, date, dateKey]);
+        const todayKey = format(new Date(), 'yyyy-MM-dd');
+        return tasks.filter(t => t.date < todayKey && t.status === 'pending');
+    }, [tasks]);
 
     const handleMoveOverdueToToday = () => {
+        const todayKey = format(new Date(), 'yyyy-MM-dd');
         overdueTasks.forEach(task => {
-            moveTaskToDate(task.id, dateKey);
+            moveTaskToDate(task.id, todayKey);
         });
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setShowOverdueModal(false);
@@ -676,10 +677,10 @@ const styles = StyleSheet.create({
     },
     topGradient: {
         position: 'absolute',
-        top: 0,
+        top: -20,
         left: 0,
         right: 0,
-        height: 60,
+        height: 50,
         zIndex: 1,
     },
     bottomGradient: {
