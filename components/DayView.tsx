@@ -1,11 +1,13 @@
 import { Colors } from '@/constants/Colors';
+// Smart Parsing Logic V3 Implemented
 import { useTaskStore } from '@/store/taskStore';
+import { schedulePushNotification } from '@/utils/notifications';
 import { Ionicons } from '@expo/vector-icons';
-import { format, isToday, isTomorrow, isYesterday } from 'date-fns';
+import { addDays, addMonths, addWeeks, addYears, differenceInCalendarDays, format, isToday, isTomorrow, isYesterday, setHours, setMinutes } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import * as Haptics from 'expo-haptics';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, FlatList, Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Animated, FlatList, Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import TaskItem from './TaskItem';
 
 interface DayViewProps {
@@ -22,6 +24,7 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar }: DayViewP
     const toggleTask = useTaskStore((state) => state.toggleTask);
     const deleteTask = useTaskStore((state) => state.deleteTask);
     const updateTask = useTaskStore((state) => state.updateTask);
+    const setReminderId = useTaskStore((state) => state.setReminderId);
 
     const [newTaskText, setNewTaskText] = useState('');
     const [isInputFocused, setIsInputFocused] = useState(false);
@@ -43,18 +46,172 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar }: DayViewP
 
     const dateDisplay = format(date, 'd MMM', { locale: tr });
     const showGoToToday = !isToday(date) && onGoToToday;
-    const isPast = date < new Date(); // Since !isToday, this correctly separates past/future days relative to now
+    const isPast = date < new Date();
 
-    const handleAddTask = () => {
-        if (newTaskText.trim()) {
-            addTask(newTaskText.trim(), dateKey);
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    const handleAddTask = async () => {
+        if (!newTaskText.trim()) {
+            setNewTaskText('');
+            return;
         }
+
+        const originalText = newTaskText.trim();
+        const lowerText = originalText.toLowerCase();
+
+        // Varsayılan olarak date prop'u (seçili gün)
+        let targetDate = date;
+        let reminderDate: Date | null = null;
+        let finalTaskText = originalText;
+
+        const now = new Date();
+
+        // Yardımcı: Eğer kelime "için" ile kullanıldıysa (örn: "yarın için"), tarih değiştirme.
+        const isForContext = (text: string, keyword: string) => {
+            return text.includes(`${keyword} için`) || text.includes(`için ${keyword}`);
+        };
+
+        // 1. TARİH TESPİTİ (Gelişmiş versiyon)
+        let dayFound = false;
+        let weekOffset = 0;
+
+        // "Haftaya" veya "Gelecek hafta" kontrolü (Offset belirle)
+        if ((lowerText.includes('haftaya') || lowerText.includes('gelecek hafta')) && !isForContext(lowerText, 'haftaya')) {
+            weekOffset = 1;
+        }
+
+        const daysMap: { [key: string]: number } = {
+            'pazartesi': 1, 'salı': 2, 'çarşamba': 3, 'perşembe': 4, 'cuma': 5, 'cumartesi': 6, 'pazar': 0
+        };
+
+        // Gün isimlerini kontrol et ve Offset ile birleştir
+        for (const [dayName, dayIndex] of Object.entries(daysMap)) {
+            if (lowerText.includes(dayName) && !isForContext(lowerText, dayName)) {
+                const currentDay = now.getDay();
+                let daysToAdd = (dayIndex - currentDay + 7) % 7;
+
+                // Eğer gün bugünse ve weekOffset yoksa, "gelecek [gün]" kastedilmiştir (7 gün sonra)
+                // Ama weekOffset varsa (Haftaya Pazartesi), o zaman 0 + 7 = 7 gün sonra olur ki bu doğrudur.
+                if (daysToAdd === 0 && weekOffset === 0) {
+                    daysToAdd = 7;
+                }
+
+                // Offset'i ekle (Haftaya Salı = En yakın Salı + 7 gün)
+                targetDate = addDays(now, daysToAdd + (weekOffset * 7));
+                dayFound = true;
+                break;
+            }
+        }
+
+        // Gün ismi bulunamadıysa standart kelimeleri kontrol et
+        if (!dayFound) {
+            if (weekOffset > 0) {
+                // Sadece "Haftaya" denmişse, bugünden 1 hafta sonra
+                targetDate = addWeeks(now, weekOffset);
+            } else if (lowerText.includes('yarın') && !isForContext(lowerText, 'yarın')) {
+                targetDate = addDays(now, 1);
+            } else if ((lowerText.includes('ertesi gün') || lowerText.includes('yarından sonra')) && !isForContext(lowerText, 'ertesi gün')) {
+                targetDate = addDays(now, 2);
+            } else if ((lowerText.includes('gelecek ay') || lowerText.includes('öbür ay')) && !isForContext(lowerText, 'gelecek ay')) {
+                targetDate = addMonths(now, 1);
+            } else if ((lowerText.includes('seneye') || lowerText.includes('gelecek yıl')) && !isForContext(lowerText, 'seneye')) {
+                targetDate = addYears(now, 1);
+            }
+        }
+
+        // Tarih değiştiyse varsayılan saat ayarla (Sabah 9)
+        if (differenceInCalendarDays(targetDate, date) !== 0) {
+            reminderDate = setHours(setMinutes(targetDate, 0), 9);
+        }
+
+        // 2. VAKİT TESPİTİ (Sabah, Öğle, Akşam)
+        if (lowerText.includes('akşam')) {
+            const baseDate = targetDate;
+            reminderDate = setHours(setMinutes(baseDate, 0), 21); // 21:00
+        } else if (lowerText.includes('sabah')) {
+            const baseDate = targetDate;
+            reminderDate = setHours(setMinutes(baseDate, 0), 9); // 09:00
+        } else if (lowerText.includes('öğle')) {
+            const baseDate = targetDate;
+            reminderDate = setHours(setMinutes(baseDate, 0), 12); // 12:00
+        }
+
+        // 3. SAAT TESPİTİ (Örn: 14:15, 14.30, 9'da, 8de)
+        const specificTimeMatch = lowerText.match(/\b(\d{1,2})[:.](\d{2})\b/);
+        const suffixTimeMatch = lowerText.match(/\b(\d{1,2})('?)(da|de|te|ta|:00)\b/);
+
+        if (specificTimeMatch) {
+            const hour = parseInt(specificTimeMatch[1]);
+            const minute = parseInt(specificTimeMatch[2]);
+
+            if (hour >= 0 && hour < 24 && minute >= 0 && minute < 60) {
+                reminderDate = setHours(setMinutes(targetDate, minute), hour);
+            }
+        } else if (suffixTimeMatch) {
+            let hour = parseInt(suffixTimeMatch[1]);
+
+            // "Akşam 9" dediğinde 21 olması için
+            if (lowerText.includes('akşam') && hour < 12) {
+                hour += 12;
+            }
+            // "Öğleden sonra 2" -> 14
+            if ((lowerText.includes('öğleden sonra') || lowerText.includes('öğlen')) && hour < 12) {
+                hour += 12;
+            }
+
+            reminderDate = setHours(setMinutes(targetDate, 0), hour);
+        }
+
+        // Akıllı düzeltme ve doğrulama (Geçmiş Zaman Kontrolü)
+        if (reminderDate) {
+            if (reminderDate < now) {
+                // 1. İhtimal: Saat PM olabilir mi? (Örn: "8de" dendi ama sabah 8 geçti, akşam 8 mi?)
+                const pmDate = new Date(reminderDate);
+                pmDate.setHours(pmDate.getHours() + 12);
+
+                if (reminderDate.getHours() < 12 && pmDate > now) {
+                    reminderDate = pmDate; // PM yaptık
+                } else {
+                    // 2. İhtimal: Tarih geçmişte kaldı, yarına/ertesi güne erteleyelim
+                    // Sadece targetDate spesifik olarak değişmediyse
+                    if (differenceInCalendarDays(targetDate, date) === 0) {
+                        targetDate = addDays(targetDate, 1);
+                        reminderDate = addDays(reminderDate, 1);
+                    }
+                }
+            }
+        }
+
+        // Target Date Key'i güncelle
+        const targetDateKey = format(targetDate, 'yyyy-MM-dd');
+
+        // Store'a ekle
+        const taskId = addTask(finalTaskText, targetDateKey);
+
+        // Bildirim kur
+        if (reminderDate && taskId) {
+            if (reminderDate > new Date()) {
+                const notifId = await schedulePushNotification(
+                    `Hatırlatıcı: ${finalTaskText}`,
+                    'Unutma!',
+                    reminderDate
+                );
+                if (notifId) {
+                    setReminderId(taskId, notifId, reminderDate.getTime());
+                }
+            }
+        }
+
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setNewTaskText('');
-        // Dismiss keyboard if desired, or keep it open for multiple entries
-        // But if empty, we definitely want to reset focus state if user pressed done
-        // However, onSubmitEditing usually keeps focus. 
-        // Let's rely on the fact that if it was empty, we cleared it.
+
+        // Kullanıcı Bildirimi
+        if (differenceInCalendarDays(targetDate, date) !== 0) {
+            const dateStr = format(targetDate, 'd MMMM EEEE', { locale: tr });
+            Alert.alert(
+                "Planlandı 📅",
+                `"${finalTaskText}" görevi ${dateStr} tarihine eklendi.`,
+                [{ text: "Tamam" }]
+            );
+        }
     };
 
     const handleLongPress = (id: string) => {
@@ -65,12 +222,11 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar }: DayViewP
         setIsAnyTaskEditing(true);
         const index = dayTasks.findIndex(t => t.id === taskId);
         if (index !== -1 && flatListRef.current) {
-            // Small delay to ensure keyboard opens first
             setTimeout(() => {
                 flatListRef.current?.scrollToIndex({
                     index,
                     animated: true,
-                    viewPosition: 0.5, // Center the item
+                    viewPosition: 0.5,
                 });
             }, 100);
         }
@@ -85,7 +241,6 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar }: DayViewP
         const keyboardWillShowListener = Keyboard.addListener(
             Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
             (e) => {
-                // Only hide if editing a task (not when adding new task)
                 if (isAnyTaskEditing) {
                     Animated.parallel([
                         Animated.timing(inputOpacity, {
@@ -133,7 +288,6 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar }: DayViewP
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 30}
         >
-            {/* Main Title with Date */}
             <View style={styles.titleSection}>
                 {showGoToToday && (
                     <Pressable
@@ -155,7 +309,6 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar }: DayViewP
                 </Pressable>
             </View>
 
-            {/* Task List */}
             <FlatList
                 ref={flatListRef}
                 data={dayTasks}
@@ -188,8 +341,6 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar }: DayViewP
                 onScrollToIndexFailed={() => { }}
             />
 
-            {/* Bottom Input - Always rendered, animated visibility */}
-            {/* Bottom Input - Always rendered, animated visibility */}
             <Animated.View
                 style={[
                     styles.bottomInputContainer,
@@ -205,7 +356,7 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar }: DayViewP
                         style={styles.inputPlaceholder}
                         onPress={() => setIsInputFocused(true)}
                     >
-                        <Ionicons name="add" size={20} color={Colors.textMuted + '80'} />
+                        <Ionicons name="add-circle" size={22} color={Colors.primary} />
                         <Text style={styles.inputPlaceholderText}>Unutmadan yaz</Text>
                     </Pressable>
                 ) : (
@@ -230,8 +381,6 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar }: DayViewP
                     </View>
                 )}
             </Animated.View>
-
-
         </KeyboardAvoidingView>
     );
 }
@@ -289,21 +438,32 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 10,
-        backgroundColor: Colors.white + '0B',
-        paddingVertical: 16,
+        backgroundColor: Colors.primary + '18',
+        paddingVertical: 18,
         paddingHorizontal: 32,
         borderRadius: 40,
-        borderWidth: 1,
-        borderColor: Colors.white + '0D',
+        borderWidth: 2,
+        borderColor: Colors.primary + '60',
+        shadowColor: Colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 8,
     },
     inputPlaceholderText: {
         fontSize: 16,
-        fontWeight: '500',
-        color: Colors.textMuted,
+        fontWeight: '600',
+        color: Colors.primary,
         letterSpacing: 0.5,
     },
     inputActive: {
         minHeight: 40,
+        backgroundColor: Colors.primary + '10',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderRadius: 20,
+        borderWidth: 1.5,
+        borderColor: Colors.primary + '40',
     },
     input: {
         color: Colors.textLight,

@@ -10,14 +10,17 @@ import { Keyboard, Platform, Pressable, StyleSheet, Text, View } from 'react-nat
 
 interface ReminderBottomSheetProps {
     taskText: string;
-    isOpen: boolean;
+    isOpen?: boolean;
     existingDate?: number;
     onSave: (date: Date) => void;
     onCancel: () => void;
+    onDelete?: () => void;
+    onMoveToTomorrow?: () => void;
+    onRemoveReminder?: () => void;
 }
 
 const ReminderBottomSheet = forwardRef<BottomSheet, ReminderBottomSheetProps>(
-    ({ taskText, onSave, onCancel, isOpen, existingDate }, ref) => {
+    ({ taskText, onSave, onCancel, isOpen, existingDate, onMoveToTomorrow, onDelete, onRemoveReminder }, ref) => {
         const [snapPoints, setSnapPoints] = useState(['90%']);
         const [selectedDate, setSelectedDate] = useState(new Date());
         const [taskInputText, setTaskInputText] = useState(taskText);
@@ -74,6 +77,13 @@ const ReminderBottomSheet = forwardRef<BottomSheet, ReminderBottomSheetProps>(
             onSave(selectedDate);
         };
 
+        const handleMoveToTomorrow = () => {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            if (onMoveToTomorrow) {
+                onMoveToTomorrow();
+            }
+        };
+
         const handleDatePress = () => {
             Haptics.selectionAsync();
             // Toggle or switch to date
@@ -100,6 +110,11 @@ const ReminderBottomSheet = forwardRef<BottomSheet, ReminderBottomSheetProps>(
             { label: 'Bu akşam 21:00', action: () => setSelectedDate(setHours(setMinutes(new Date(), 0), 21)) },
             { label: 'Yarın sabah', action: () => setSelectedDate(setHours(addDays(new Date(), 1), 9)) },
             { label: 'Haftaya', action: () => setSelectedDate(addDays(new Date(), 7)) },
+        ];
+
+        // Special task management actions
+        const taskActions = [
+            { label: '📅 Yarına Aktar', icon: 'arrow-forward-outline', action: 'moveToTomorrow' },
         ];
 
         // Format logic for Display Card
@@ -150,11 +165,24 @@ const ReminderBottomSheet = forwardRef<BottomSheet, ReminderBottomSheetProps>(
                     {/* Reminder Section */}
                     <View style={styles.reminderSection}>
                         {!!existingDate && existingDate > Date.now() && (
-                            <View style={styles.existingReminderBanner}>
-                                <Ionicons name="checkmark-circle-outline" size={18} color={Colors.primary} />
-                                <Text style={styles.existingReminderText}>
-                                    Zamanlandı: {format(existingDate, 'd MMMM HH:mm', { locale: tr })}
-                                </Text>
+                            <View style={styles.existingReminderContainer}>
+                                <View style={styles.existingReminderBanner}>
+                                    <Ionicons name="checkmark-circle-outline" size={18} color={Colors.primary} />
+                                    <Text style={styles.existingReminderText}>
+                                        Zamanlandı: {format(existingDate, 'd MMMM HH:mm', { locale: tr })}
+                                    </Text>
+                                </View>
+                                {onRemoveReminder && (
+                                    <Pressable
+                                        style={styles.removeReminderButton}
+                                        onPress={() => {
+                                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                                            onRemoveReminder();
+                                        }}
+                                    >
+                                        <Ionicons name="close-circle" size={20} color={Colors.white + '80'} />
+                                    </Pressable>
+                                )}
                             </View>
                         )}
 
@@ -218,13 +246,35 @@ const ReminderBottomSheet = forwardRef<BottomSheet, ReminderBottomSheetProps>(
                                 </Pressable>
                             ))}
                         </View>
+
+                        {/* Move to Tomorrow Action */}
+                        {onMoveToTomorrow && (
+                            <Pressable
+                                style={styles.moveToTomorrowButton}
+                                onPress={handleMoveToTomorrow}
+                            >
+                                <Ionicons name="arrow-forward-outline" size={18} color={Colors.primary} />
+                                <Text style={styles.moveToTomorrowText}>Yarına Aktar</Text>
+                                <Text style={styles.moveToTomorrowSubtext}>Görevi yarın için planla</Text>
+                            </Pressable>
+                        )}
                     </View>
                 </BottomSheetScrollView>
 
                 {/* Fixed Header at Bottom */}
                 <View style={[styles.fixedHeader, { paddingBottom: Platform.OS === 'ios' ? 32 : 24 }]}>
-                    <Pressable onPress={onCancel} hitSlop={20} style={styles.cancelButtonContainer}>
-                        <Text style={styles.cancelButton}>İptal</Text>
+                    <Pressable
+                        onPress={() => {
+                            if (onDelete) {
+                                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                                onDelete();
+                            }
+                        }}
+                        hitSlop={20}
+                        style={styles.deleteButtonContainer}
+                    >
+                        <Ionicons name="trash-outline" size={18} color={Colors.red} />
+                        <Text style={styles.deleteButton}>Sil</Text>
                     </Pressable>
                     <Pressable onPress={handleSave} style={styles.saveButton}>
                         <Text style={styles.saveButtonText}>Kaydet</Text>
@@ -264,14 +314,16 @@ const styles = StyleSheet.create({
         borderTopWidth: 1,
         borderTopColor: Colors.white + '08',
     },
-    cancelButtonContainer: {
+    deleteButtonContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
         padding: 8,
     },
-    cancelButton: {
+    deleteButton: {
         fontSize: 16,
-        fontWeight: '500',
-        color: Colors.textMuted,
-        padding: 8,
+        fontWeight: '600',
+        color: Colors.red,
     },
     saveButton: {
         backgroundColor: Colors.primary,
@@ -389,21 +441,57 @@ const styles = StyleSheet.create({
         fontWeight: '500',
         color: Colors.white,
     },
+
+    existingReminderText: {
+        fontSize: 14,
+        color: Colors.primary,
+        fontWeight: '600',
+    },
+    // New reminder container styles
+    existingReminderContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 8,
+    },
     existingReminderBanner: {
+        flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
         gap: 10,
         backgroundColor: Colors.primary + '15',
         padding: 12,
         borderRadius: 16,
-        marginBottom: 8,
         borderWidth: 1,
         borderColor: Colors.primary + '20',
     },
-    existingReminderText: {
-        fontSize: 14,
+    removeReminderButton: {
+        padding: 8,
+        backgroundColor: Colors.white + '08', // light bg
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    moveToTomorrowButton: {
+        backgroundColor: Colors.primary + '20',
+        borderRadius: 20,
+        padding: 20,
+        marginTop: 8,
+        borderWidth: 1.5,
+        borderColor: Colors.primary + '40',
+        alignItems: 'center',
+        gap: 6,
+    },
+    moveToTomorrowText: {
+        fontSize: 16,
+        fontWeight: '700',
         color: Colors.primary,
-        fontWeight: '600',
+        marginTop: 4,
+    },
+    moveToTomorrowSubtext: {
+        fontSize: 13,
+        fontWeight: '500',
+        color: Colors.primary + 'AA',
     },
 });
 

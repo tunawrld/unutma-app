@@ -7,24 +7,26 @@ import { Task, TaskCategory } from '../types';
 
 interface TaskState {
     tasks: Task[];
-    addTask: (text: string, date: string, category?: TaskCategory) => void;
+    addTask: (text: string, date: string, category?: TaskCategory) => string;
     toggleTask: (id: string) => void;
     deleteTask: (id: string) => void;
     updateTask: (id: string, text: string) => void;
-    setReminderId: (id: string, reminderId: string, reminderDate: number) => void;
+    setReminderId: (id: string, reminderId: string | undefined, reminderDate: number | undefined) => void;
     updateCategory: (id: string, category: TaskCategory) => void;
+    moveTaskToDate: (id: string, newDate: string) => void;
 }
 
 export const useTaskStore = create<TaskState>()(
     persist(
         (set) => ({
             tasks: [],
-            addTask: (text, date, category = 'none') =>
+            addTask: (text, date, category = 'none') => {
+                const id = uuidv4();
                 set((state) => ({
                     tasks: [
                         ...state.tasks,
                         {
-                            id: uuidv4(),
+                            id,
                             text,
                             date,
                             status: 'pending',
@@ -32,7 +34,9 @@ export const useTaskStore = create<TaskState>()(
                             category,
                         },
                     ],
-                })),
+                }));
+                return id;
+            },
             toggleTask: (id) =>
                 set((state) => ({
                     tasks: state.tasks.map((task) =>
@@ -61,6 +65,12 @@ export const useTaskStore = create<TaskState>()(
                 set((state) => ({
                     tasks: state.tasks.map((task) =>
                         task.id === id ? { ...task, category } : task
+                    ),
+                })),
+            moveTaskToDate: (id, newDate) =>
+                set((state) => ({
+                    tasks: state.tasks.map((task) =>
+                        task.id === id ? { ...task, date: newDate } : task
                     ),
                 })),
         }),

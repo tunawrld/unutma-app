@@ -1,11 +1,13 @@
 import DayView from '@/components/DayView';
 import ReminderBottomSheet from '@/components/ReminderBottomSheet';
+import WelcomeScreen from '@/components/WelcomeScreen';
 import { Colors } from '@/constants/Colors';
 import { useTaskStore } from '@/store/taskStore';
 import { cancelNotification, schedulePushNotification } from '@/utils/notifications';
 import BottomSheet from '@gorhom/bottom-sheet';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { addDays, differenceInCalendarDays } from 'date-fns';
+import { addDays, differenceInCalendarDays, format } from 'date-fns';
 import * as Haptics from 'expo-haptics';
 import React, { useEffect, useRef, useState } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -21,40 +23,63 @@ export default function HomeScreen() {
     const pagerRef = useRef<PagerView>(null);
     const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
     const [showDatePicker, setShowDatePicker] = useState(false);
+    const [isSheetOpen, setIsSheetOpen] = useState(false);
+    const [isFirstLaunch, setIsFirstLaunch] = useState<boolean | null>(null);
     const [tempDate, setTempDate] = useState(new Date());
     const [targetPage, setTargetPage] = useState<number | null>(null);
     const insets = useSafeAreaInsets();
 
     const tasks = useTaskStore((state) => state.tasks);
     const setReminderId = useTaskStore((state) => state.setReminderId);
+    const moveTaskToDate = useTaskStore((state) => state.moveTaskToDate);
+    const deleteTask = useTaskStore((state) => state.deleteTask);
 
-    // Reset targetPage when we reach the destination
     useEffect(() => {
         if (targetPage !== null && activePage === targetPage) {
             setTargetPage(null);
         }
     }, [activePage, targetPage]);
 
+    useEffect(() => {
+        checkFirstLaunch();
+    }, []);
+
+    const checkFirstLaunch = async () => {
+        try {
+            const hasLaunched = await AsyncStorage.getItem('hasLaunched');
+            if (hasLaunched === null) {
+                setIsFirstLaunch(true);
+            } else {
+                setIsFirstLaunch(false);
+            }
+        } catch (e) {
+            setIsFirstLaunch(false);
+        }
+    };
+
+    const handleWelcomeComplete = async () => {
+        await AsyncStorage.setItem('hasLaunched', 'true');
+        setIsFirstLaunch(false);
+    };
+
     const goToPage = (page: number) => {
         const diff = Math.abs(page - activePage);
         if (diff === 0) return;
 
-        // If distance is large, snap instantly to avoid scrolling through empty pages
-        // But render it first (via targetPage) so it's not white
-        if (diff > 5) {
-            setTargetPage(page);
-            // Wait a frame for render, then snap
-            requestAnimationFrame(() => {
+        setTargetPage(page);
+
+        requestAnimationFrame(() => {
+            if (diff > 1) {
                 pagerRef.current?.setPageWithoutAnimation(page);
-            });
-        } else {
-            // Smooth scroll for short distances
-            pagerRef.current?.setPage(page);
-        }
+            } else {
+                pagerRef.current?.setPage(page);
+            }
+        });
     };
 
     const handleOpenReminder = (taskId: string) => {
         setSelectedTaskId(taskId);
+        setIsSheetOpen(true);
         bottomSheetRef.current?.expand();
     };
 
@@ -71,7 +96,7 @@ export default function HomeScreen() {
                     reminderDate
                 );
                 if (id) {
-                    setReminderId(selectedTaskId, id);
+                    setReminderId(selectedTaskId, id, reminderDate.getTime());
                     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                 } else {
                     alert("Cannot schedule reminder in the past!");
@@ -80,11 +105,74 @@ export default function HomeScreen() {
         }
         bottomSheetRef.current?.close();
         setSelectedTaskId(null);
+        setIsSheetOpen(false);
     };
 
     const handleCancelReminder = () => {
         bottomSheetRef.current?.close();
         setSelectedTaskId(null);
+        setIsSheetOpen(false);
+    };
+
+    const handleDeleteTask = () => {
+        if (selectedTaskId) {
+            deleteTask(selectedTaskId);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+        bottomSheetRef.current?.close();
+        setSelectedTaskId(null);
+        setIsSheetOpen(false);
+    };
+
+    const handleMoveToTomorrow = async () => {
+        if (selectedTaskId) {
+            const task = tasks.find(t => t.id === selectedTaskId);
+            if (task) {
+                const currentTaskDate = new Date(task.date);
+                const tomorrowDate = addDays(currentTaskDate, 1);
+                const tomorrowDateKey = format(tomorrowDate, 'yyyy-MM-dd');
+
+                moveTaskToDate(selectedTaskId, tomorrowDateKey);
+
+                // Eğer bildirim varsa, onu da yarına taşı
+                if (task.reminderId && task.reminderDate) {
+                    await cancelNotification(task.reminderId);
+
+                    const oldReminderDate = new Date(task.reminderDate);
+                    const newReminderDate = addDays(oldReminderDate, 1);
+
+                    if (newReminderDate > new Date()) {
+                        const newNotifId = await schedulePushNotification(
+                            `Hatırlatıcı: ${task.text}`,
+                            'Unutma!',
+                            newReminderDate
+                        );
+                        if (newNotifId) {
+                            setReminderId(selectedTaskId, newNotifId, newReminderDate.getTime());
+                        }
+                    }
+                }
+
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            }
+        }
+        bottomSheetRef.current?.close();
+        setSelectedTaskId(null);
+        setIsSheetOpen(false);
+    };
+
+    const handleRemoveReminder = async () => {
+        if (selectedTaskId) {
+            const task = tasks.find(t => t.id === selectedTaskId);
+            if (task && task.reminderId) {
+                await cancelNotification(task.reminderId);
+                setReminderId(selectedTaskId, undefined, undefined);
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            }
+        }
+        bottomSheetRef.current?.close();
+        setSelectedTaskId(null);
+        setIsSheetOpen(false);
     };
 
     const selectedTask = selectedTaskId ? tasks.find(t => t.id === selectedTaskId) : null;
@@ -108,13 +196,6 @@ export default function HomeScreen() {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     };
 
-    const isCurrentPageToday = (() => {
-        const today = new Date();
-        const diff = differenceInCalendarDays(today, initialDate);
-        const todayPage = initialPage + diff;
-        return activePage === todayPage;
-    })();
-
     return (
         <GestureHandlerRootView style={styles.container}>
             <SafeAreaView style={styles.safeArea}>
@@ -127,13 +208,8 @@ export default function HomeScreen() {
                     {Array.from({ length: 2001 }).map((_, index) => {
                         const dayOffset = index - initialPage;
                         const date = addDays(initialDate, dayOffset);
-
-                        // Only render components close to current page (Windowing)
-                        // OR close to the target page we are jumping to
                         const isCloseToActive = Math.abs(index - activePage) <= 2;
                         const isCloseToTarget = targetPage !== null && Math.abs(index - targetPage) <= 2;
-
-                        // We render if it's close to EITHER the current view or the destination
                         const shouldRender = isCloseToActive || isCloseToTarget;
 
                         if (!shouldRender) {
@@ -156,7 +232,6 @@ export default function HomeScreen() {
                     })}
                 </PagerView>
 
-                {/* Date Picker (Modal for iOS, Inline for Android) */}
                 {showDatePicker && (
                     Platform.OS === 'ios' ? (
                         <Modal
@@ -197,10 +272,17 @@ export default function HomeScreen() {
 
             <ReminderBottomSheet
                 ref={bottomSheetRef}
+                isOpen={isSheetOpen}
                 taskText={selectedTask?.text || ''}
                 onSave={handleSaveReminder}
                 onCancel={handleCancelReminder}
+                onDelete={handleDeleteTask}
+                onMoveToTomorrow={handleMoveToTomorrow}
+                onRemoveReminder={handleRemoveReminder}
+                existingDate={selectedTask?.reminderDate}
             />
+
+            {isFirstLaunch && <WelcomeScreen onStart={handleWelcomeComplete} />}
         </GestureHandlerRootView>
     );
 }
@@ -221,7 +303,7 @@ const styles = StyleSheet.create({
         right: 24,
         zIndex: 10,
         padding: 8,
-        backgroundColor: Colors.backgroundDark + '80', // semi-transparent
+        backgroundColor: Colors.backgroundDark + '80',
         borderRadius: 20,
     },
     modalOverlay: {
@@ -238,7 +320,7 @@ const styles = StyleSheet.create({
         maxWidth: 370,
         borderWidth: 1,
         borderColor: Colors.primary + '30',
-        alignItems: 'center', // Center children (calendar)
+        alignItems: 'center',
     },
     modalHeader: {
         width: '100%',
