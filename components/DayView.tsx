@@ -11,9 +11,10 @@ import TaskItem from './TaskItem';
 interface DayViewProps {
     date: Date;
     onOpenReminder: (taskId: string) => void;
+    onGoToToday?: () => void;
 }
 
-export default function DayView({ date, onOpenReminder }: DayViewProps) {
+export default function DayView({ date, onOpenReminder, onGoToToday }: DayViewProps) {
     const dateKey = format(date, 'yyyy-MM-dd');
     const tasks = useTaskStore((state) => state.tasks);
     const addTask = useTaskStore((state) => state.addTask);
@@ -40,6 +41,7 @@ export default function DayView({ date, onOpenReminder }: DayViewProps) {
     if (isTomorrow(date)) headerTitle = 'Yarın';
 
     const dateDisplay = format(date, 'd MMM', { locale: tr });
+    const showGoToToday = !isToday(date) && onGoToToday;
 
     const handleAddTask = () => {
         if (newTaskText.trim()) {
@@ -133,6 +135,11 @@ export default function DayView({ date, onOpenReminder }: DayViewProps) {
             <View style={styles.titleSection}>
                 <Text style={styles.title}>{headerTitle}</Text>
                 <Text style={styles.dateText}>{dateDisplay}</Text>
+                {showGoToToday && (
+                    <Pressable style={styles.goToTodayButton} onPress={onGoToToday}>
+                        <Text style={styles.goToTodayText}>Bugüne Git</Text>
+                    </Pressable>
+                )}
             </View>
 
             {/* Task List */}

@@ -128,20 +128,11 @@ export default function HomeScreen() {
                                 key={index}
                                 date={date}
                                 onOpenReminder={handleOpenReminder}
+                                onGoToToday={handleGoToToday}
                             />
                         );
                     })}
                 </PagerView>
-
-                {/* Today Button - Top Left */}
-                {!isCurrentPageToday && (
-                    <Pressable
-                        style={[styles.todayButton, { top: insets.top + 15 }]}
-                        onPress={handleGoToToday}
-                    >
-                        <Text style={styles.todayButtonText}>Bugüne Git</Text>
-                    </Pressable>
-                )}
 
                 {/* Calendar Button */}
                 <Pressable
