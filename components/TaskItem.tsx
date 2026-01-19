@@ -17,7 +17,7 @@ interface TaskItemProps {
 
 const ITEM_HEIGHT = 56;
 
-export default function TaskItem({ task, onToggle, onDelete, onLongPress, onUpdate, onEditStart, onEditEnd }: TaskItemProps) {
+function TaskItem({ task, onToggle, onDelete, onLongPress, onUpdate, onEditStart, onEditEnd }: TaskItemProps) {
     const [isEditing, setIsEditing] = useState(false);
     const [editText, setEditText] = useState(task.text);
 
@@ -99,6 +99,7 @@ export default function TaskItem({ task, onToggle, onDelete, onLongPress, onUpda
     );
 }
 
+export default React.memo(TaskItem);
 
 const styles = StyleSheet.create({
     taskContainer: {
@@ -159,3 +160,6 @@ const styles = StyleSheet.create({
         textDecorationColor: Colors.primary + '66', // 40% opacity
     },
 });
+
+
+

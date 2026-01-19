@@ -14,7 +14,7 @@ interface DayViewProps {
     onGoToToday?: () => void;
 }
 
-export default function DayView({ date, onOpenReminder, onGoToToday }: DayViewProps) {
+function DayView({ date, onOpenReminder, onGoToToday }: DayViewProps) {
     const dateKey = format(date, 'yyyy-MM-dd');
     const tasks = useTaskStore((state) => state.tasks);
     const addTask = useTaskStore((state) => state.addTask);
@@ -42,6 +42,7 @@ export default function DayView({ date, onOpenReminder, onGoToToday }: DayViewPr
 
     const dateDisplay = format(date, 'd MMM', { locale: tr });
     const showGoToToday = !isToday(date) && onGoToToday;
+    const isPast = date < new Date(); // Since !isToday, this correctly separates past/future days relative to now
 
     const handleAddTask = () => {
         if (newTaskText.trim()) {
@@ -133,13 +134,21 @@ export default function DayView({ date, onOpenReminder, onGoToToday }: DayViewPr
         >
             {/* Main Title with Date */}
             <View style={styles.titleSection}>
-                <Text style={styles.title}>{headerTitle}</Text>
-                <Text style={styles.dateText}>{dateDisplay}</Text>
                 {showGoToToday && (
-                    <Pressable style={styles.goToTodayButton} onPress={onGoToToday}>
+                    <Pressable
+                        style={[styles.goToTodayButton, { flexDirection: isPast ? 'row-reverse' : 'row' }]}
+                        onPress={onGoToToday}
+                    >
+                        <Ionicons
+                            name={isPast ? "arrow-forward" : "arrow-back"}
+                            size={16}
+                            color={Colors.primary}
+                        />
                         <Text style={styles.goToTodayText}>Bugüne Git</Text>
                     </Pressable>
                 )}
+                <Text style={styles.title}>{headerTitle}</Text>
+                <Text style={styles.dateText}>{dateDisplay}</Text>
             </View>
 
             {/* Task List */}
@@ -213,6 +222,8 @@ export default function DayView({ date, onOpenReminder, onGoToToday }: DayViewPr
     );
 }
 
+export default React.memo(DayView);
+
 const styles = StyleSheet.create({
     container: {
         flex: 1,
@@ -227,10 +238,12 @@ const styles = StyleSheet.create({
         marginBottom: 2,
     },
     titleSection: {
+        position: 'relative',
         paddingHorizontal: 24,
         paddingTop: 16,
         marginBottom: 24,
         alignItems: 'center',
+        justifyContent: 'center',
     },
     title: {
         fontSize: 32,
@@ -277,14 +290,17 @@ const styles = StyleSheet.create({
         fontStyle: 'italic',
     },
     goToTodayButton: {
-        marginTop: 6,
-        paddingHorizontal: 12,
-        paddingVertical: 5,
-        backgroundColor: Colors.primary + '20',
-        borderRadius: 12,
+        position: 'absolute',
+        left: 24,
+        top: 23, // Aligned with calendar icon center
+        zIndex: 10,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 2, // Tighter gap
+        paddingVertical: 4, // Smaller padding
     },
     goToTodayText: {
-        fontSize: 13,
+        fontSize: 12, // Smaller font
         fontWeight: '600',
         color: Colors.primary,
     },

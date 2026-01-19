@@ -7,4 +7,5 @@ export interface Task {
     status: TaskStatus;
     createdAt: number;
     reminderId?: string; // Notification ID
+    reminderDate?: number; // Timestamp for when the reminder triggers
 }

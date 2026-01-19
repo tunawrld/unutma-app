@@ -2,23 +2,29 @@ import { Colors } from '@/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet, { BottomSheetBackdrop, BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { addDays, addHours, format, setHours, setMinutes } from 'date-fns';
+import { addDays, addHours, format, isToday, isTomorrow, setHours, setMinutes } from 'date-fns';
+import { tr } from 'date-fns/locale';
+import * as Haptics from 'expo-haptics';
 import React, { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
-import { Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Keyboard, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 interface ReminderBottomSheetProps {
     taskText: string;
+    isOpen: boolean;
+    existingDate?: number;
     onSave: (date: Date) => void;
     onCancel: () => void;
 }
 
 const ReminderBottomSheet = forwardRef<BottomSheet, ReminderBottomSheetProps>(
-    ({ taskText, onSave, onCancel }, ref) => {
+    ({ taskText, onSave, onCancel, isOpen, existingDate }, ref) => {
         const [snapPoints, setSnapPoints] = useState(['90%']);
         const [selectedDate, setSelectedDate] = useState(new Date());
         const [taskInputText, setTaskInputText] = useState(taskText);
-        const [showDatePicker, setShowDatePicker] = useState(false);
-        const [showTimePicker, setShowTimePicker] = useState(false);
+
+        // iOS & Android State unified
+        const [activePickerMode, setActivePickerMode] = useState<'date' | 'time' | null>(null);
+
         const scrollViewRef = useRef<any>(null);
         const inputRef = useRef<any>(null);
 
@@ -34,29 +40,25 @@ const ReminderBottomSheet = forwardRef<BottomSheet, ReminderBottomSheetProps>(
             []
         );
 
-        // Sync task text when modal opens with a new task
+        // Reset state when modal opens
         useEffect(() => {
-            setTaskInputText(taskText);
-        }, [taskText]);
+            if (isOpen) {
+                setTaskInputText(taskText);
+                setSelectedDate(new Date());
+                setActivePickerMode(null);
+            }
+        }, [isOpen, taskText]);
 
-        // Handle keyboard show/hide to adjust bottom sheet
+        // Keyboard handling
         useEffect(() => {
             const keyboardWillShow = Keyboard.addListener(
                 Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-                (e) => {
-                    // When keyboard shows, increase snap point to push sheet higher
-                    setSnapPoints(['95%']);
-                }
+                () => setSnapPoints(['95%'])
             );
-
             const keyboardWillHide = Keyboard.addListener(
                 Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-                () => {
-                    // When keyboard hides, return to normal size
-                    setSnapPoints(['90%']);
-                }
+                () => setSnapPoints(['90%'])
             );
-
             return () => {
                 keyboardWillShow.remove();
                 keyboardWillHide.remove();
@@ -64,22 +66,52 @@ const ReminderBottomSheet = forwardRef<BottomSheet, ReminderBottomSheetProps>(
         }, []);
 
         const handleSave = () => {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             onSave(selectedDate);
+        };
+
+        const handleDatePress = () => {
+            Haptics.selectionAsync();
+            // Toggle or switch to date
+            setActivePickerMode(activePickerMode === 'date' ? null : 'date');
+        };
+
+        const handleTimePress = () => {
+            Haptics.selectionAsync();
+            // Toggle or switch to time
+            setActivePickerMode(activePickerMode === 'time' ? null : 'time');
+        };
+
+        const handleDateChange = (event: any, date?: Date) => {
+            if (Platform.OS === 'android') {
+                setActivePickerMode(null);
+            }
+            if (date) {
+                setSelectedDate(date);
+            }
         };
 
         const quickSuggestions = [
             { label: '1 saat sonra', action: () => setSelectedDate(addHours(new Date(), 1)) },
-            { label: 'Akşam 21:00', action: () => setSelectedDate(setHours(setMinutes(new Date(), 0), 21)) },
+            { label: 'Bu akşam 21:00', action: () => setSelectedDate(setHours(setMinutes(new Date(), 0), 21)) },
             { label: 'Yarın sabah', action: () => setSelectedDate(setHours(addDays(new Date(), 1), 9)) },
             { label: 'Haftaya', action: () => setSelectedDate(addDays(new Date(), 7)) },
         ];
+
+        // Format logic for Display Card
+        let dateLabel = format(selectedDate, 'd MMMM EEEE', { locale: tr });
+        if (isToday(selectedDate)) dateLabel = 'Bugün';
+        if (isTomorrow(selectedDate)) dateLabel = 'Yarın';
+
+        const timeLabel = format(selectedDate, 'HH:mm');
 
         return (
             <BottomSheet
                 ref={ref}
                 index={-1}
                 snapPoints={snapPoints}
-                enablePanDownToClose
+                enablePanDownToClose={!activePickerMode} // Disable closing while picking
+                enableContentPanningGesture={!activePickerMode} // Disable sheet pan while picking
                 backdropComponent={renderBackdrop}
                 backgroundStyle={styles.bottomSheetBackground}
                 handleIndicatorStyle={styles.handleIndicator}
@@ -95,7 +127,7 @@ const ReminderBottomSheet = forwardRef<BottomSheet, ReminderBottomSheetProps>(
                 >
                     {/* Header */}
                     <View style={styles.header}>
-                        <Pressable onPress={onCancel}>
+                        <Pressable onPress={onCancel} hitSlop={20}>
                             <Text style={styles.cancelButton}>İptal</Text>
                         </Pressable>
                         <Pressable onPress={handleSave} style={styles.saveButton}>
@@ -114,7 +146,6 @@ const ReminderBottomSheet = forwardRef<BottomSheet, ReminderBottomSheetProps>(
                             onChangeText={setTaskInputText}
                             multiline
                             onFocus={() => {
-                                // Scroll to top to show input when keyboard opens
                                 setTimeout(() => {
                                     scrollViewRef.current?.scrollTo({ y: 0, animated: true });
                                 }, 100);
@@ -124,75 +155,75 @@ const ReminderBottomSheet = forwardRef<BottomSheet, ReminderBottomSheetProps>(
 
                     {/* Reminder Section */}
                     <View style={styles.reminderSection}>
+                        {!!existingDate && existingDate > Date.now() && (
+                            <View style={styles.existingReminderBanner}>
+                                <Ionicons name="checkmark-circle-outline" size={18} color={Colors.primary} />
+                                <Text style={styles.existingReminderText}>
+                                    Zamanlandı: {format(existingDate, 'd MMMM HH:mm', { locale: tr })}
+                                </Text>
+                            </View>
+                        )}
+
                         <View style={styles.reminderHeader}>
-                            <Ionicons name="notifications-outline" size={18} color={Colors.primary} />
-                            <Text style={styles.reminderLabel}>Hatırlatıcı</Text>
+                            <Ionicons name="notifications-outline" size={20} color={Colors.primary} />
+                            <Text style={styles.reminderLabel}>Zamanlayıcı</Text>
                         </View>
 
-                        {/* Date/Time Pickers - Interactive */}
-                        <View style={styles.pickerContainer}>
-                            <Pressable
-                                style={styles.pickerBox}
-                                onPress={() => setShowDatePicker(true)}
-                            >
-                                <Text style={styles.pickerLabel}>Tarih</Text>
-                                <Text style={styles.pickerValue}>{format(selectedDate, 'dd MMM')}</Text>
+                        {/* Large Date Display Card */}
+                        <View style={styles.dateDisplayCard}>
+                            <Pressable style={styles.dateInfoLeft} onPress={handleDatePress}>
+                                <Text style={styles.dateLabelText}>{dateLabel}</Text>
+                                <Text style={styles.fullDateText}>{format(selectedDate, 'd MMMM yyyy', { locale: tr })}</Text>
                             </Pressable>
-                            <Pressable
-                                style={styles.pickerBox}
-                                onPress={() => setShowTimePicker(true)}
-                            >
-                                <Text style={styles.pickerLabel}>Saat</Text>
-                                <Text style={styles.pickerValue}>{format(selectedDate, 'HH:mm')}</Text>
+                            <Pressable style={styles.timeInfoRight} onPress={handleTimePress}>
+                                <Text style={styles.timeLabelText}>{timeLabel}</Text>
                             </Pressable>
                         </View>
 
-                        {/* Date Picker Modal */}
-                        {showDatePicker && (
+                        {/* Pickers */}
+                        {Platform.OS === 'ios' && activePickerMode && (
+                            <View style={styles.pickerWrapper}>
+                                <DateTimePicker
+                                    value={selectedDate}
+                                    mode={activePickerMode}
+                                    display={activePickerMode === 'date' ? 'inline' : 'spinner'}
+                                    onChange={handleDateChange}
+                                    textColor={Colors.white}
+                                    themeVariant="dark"
+                                    locale="tr-TR"
+                                    style={styles.dateTimePicker}
+                                />
+                            </View>
+                        )}
+                        {Platform.OS === 'android' && activePickerMode && (
                             <DateTimePicker
                                 value={selectedDate}
-                                mode="date"
-                                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                                onChange={(_event, date) => {
-                                    setShowDatePicker(Platform.OS === 'ios');
-                                    if (date) setSelectedDate(date);
-                                }}
+                                mode={activePickerMode}
+                                display="default"
+                                onChange={handleDateChange}
                                 textColor={Colors.white}
                                 themeVariant="dark"
                             />
                         )}
 
-                        {/* Time Picker Modal */}
-                        {showTimePicker && (
-                            <DateTimePicker
-                                value={selectedDate}
-                                mode="time"
-                                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                                onChange={(_event, date) => {
-                                    setShowTimePicker(Platform.OS === 'ios');
-                                    if (date) setSelectedDate(date);
-                                }}
-                                textColor={Colors.white}
-                                themeVariant="dark"
-                            />
-                        )}
-
-                        {/* Quick Suggestions */}
-                        <ScrollView
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            contentContainerStyle={styles.suggestionsContainer}
-                        >
+                        {/* Quick Suggestions - Grid Layout */}
+                        <View style={styles.suggestionsContainer}>
                             {quickSuggestions.map((suggestion, index) => (
                                 <Pressable
                                     key={index}
                                     style={styles.suggestionChip}
-                                    onPress={suggestion.action}
+                                    onPress={() => {
+                                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                        suggestion.action();
+                                    }}
                                 >
-                                    <Text style={styles.suggestionText}>{suggestion.label}</Text>
+                                    <View style={styles.chipContent}>
+                                        <Ionicons name="flash-outline" size={12} color={Colors.white + '80'} />
+                                        <Text style={styles.suggestionText}>{suggestion.label}</Text>
+                                    </View>
                                 </Pressable>
                             ))}
-                        </ScrollView>
+                        </View>
                     </View>
                 </BottomSheetScrollView>
             </BottomSheet>
@@ -203,52 +234,55 @@ const ReminderBottomSheet = forwardRef<BottomSheet, ReminderBottomSheetProps>(
 const styles = StyleSheet.create({
     bottomSheetBackground: {
         backgroundColor: Colors.sheetDark,
-        borderTopLeftRadius: 16,
-        borderTopRightRadius: 16,
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
     },
     handleIndicator: {
-        backgroundColor: Colors.white + '1A',
+        backgroundColor: Colors.white + '20',
         width: 40,
         height: 4,
+        marginTop: 8
     },
     contentContainer: {
         paddingHorizontal: 24,
     },
     scrollContent: {
-        paddingBottom: 200,
+        paddingBottom: 400, // Extra padding for scroll
     },
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingVertical: 8,
-        marginBottom: 16,
+        paddingVertical: 16,
+        marginBottom: 8,
     },
     cancelButton: {
-        fontSize: 14,
+        fontSize: 16,
         fontWeight: '500',
-        color: '#9ac1a4',
+        color: Colors.textMuted,
+        padding: 8,
     },
     saveButton: {
-        backgroundColor: Colors.primary + '1A',
-        paddingHorizontal: 16,
-        paddingVertical: 6,
-        borderRadius: 20,
+        backgroundColor: Colors.primary,
+        paddingHorizontal: 20,
+        paddingVertical: 8,
+        borderRadius: 24,
     },
     saveButtonText: {
-        fontSize: 14,
+        fontSize: 15,
         fontWeight: '700',
-        color: Colors.primary,
+        color: Colors.backgroundDark, // Dark text on primary button
     },
     inputSection: {
-        marginBottom: 32,
+        marginBottom: 24,
     },
     taskInput: {
-        fontSize: 20,
+        fontSize: 22,
         fontWeight: '500',
         color: Colors.white,
-        minHeight: 120,
+        minHeight: 80,
         textAlignVertical: 'top',
+        lineHeight: 28,
     },
     reminderSection: {
         gap: 16,
@@ -257,51 +291,108 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
+        marginBottom: 4,
     },
     reminderLabel: {
         fontSize: 14,
-        fontWeight: '500',
-        color: Colors.white + '66',
+        fontWeight: '600',
+        color: Colors.primary,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
     },
-    pickerContainer: {
+    // New Card Styles
+    dateDisplayCard: {
         flexDirection: 'row',
-        gap: 16,
-    },
-    pickerBox: {
-        flex: 1,
-        backgroundColor: '#29422f' + '4D',
-        borderRadius: 12,
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        backgroundColor: Colors.white + '08', // Low opacity white
+        borderRadius: 20,
+        padding: 20,
         borderWidth: 1,
         borderColor: Colors.white + '0D',
-        paddingVertical: 12,
-        paddingHorizontal: 8,
-        alignItems: 'center',
-        gap: 4,
     },
-    pickerLabel: {
-        fontSize: 12,
-        color: Colors.white + '4D',
+    dateInfoLeft: {
+        flex: 1,
     },
-    pickerValue: {
-        fontSize: 16,
+    dateLabelText: {
+        fontSize: 20,
         fontWeight: '600',
         color: Colors.white,
+        marginBottom: 4,
     },
+    fullDateText: {
+        fontSize: 14,
+        color: Colors.white + '80', // subtitles
+    },
+    timeInfoRight: {
+        backgroundColor: Colors.primary + '1A', // pill bg
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: Colors.primary + '30',
+    },
+    timeLabelText: {
+        fontSize: 28,
+        fontWeight: '700',
+        color: Colors.primary,
+        fontVariant: ['tabular-nums'],
+    },
+    pickerWrapper: {
+        backgroundColor: Colors.white + '05',
+        borderRadius: 16,
+        overflow: 'hidden',
+        padding: 8,
+        marginTop: -8, // connect visual
+    },
+    dateTimePicker: {
+        height: 340, // Ensure height for inline picker
+        width: '100%',
+    },
+    // Chips
     suggestionsContainer: {
         flexDirection: 'row',
-        gap: 8,
-        paddingVertical: 12,
+        flexWrap: 'wrap',
+        gap: 12,
+        paddingVertical: 8,
     },
     suggestionChip: {
-        backgroundColor: Colors.white + '0D',
+        backgroundColor: Colors.white + '0A',
         paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 20,
+        paddingVertical: 14,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: Colors.white + '08',
+        flexGrow: 1,
+        minWidth: '45%',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    chipContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
     },
     suggestionText: {
-        fontSize: 12,
+        fontSize: 14,
         fontWeight: '500',
-        color: Colors.white + 'B3',
+        color: Colors.white,
+    },
+    existingReminderBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        backgroundColor: Colors.primary + '15',
+        padding: 12,
+        borderRadius: 16,
+        marginBottom: 8,
+        borderWidth: 1,
+        borderColor: Colors.primary + '20',
+    },
+    existingReminderText: {
+        fontSize: 14,
+        color: Colors.primary,
+        fontWeight: '600',
     },
 });
 

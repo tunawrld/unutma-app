@@ -8,7 +8,7 @@ import BottomSheet from '@gorhom/bottom-sheet';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { addDays, differenceInCalendarDays } from 'date-fns';
 import * as Haptics from 'expo-haptics';
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import PagerView from 'react-native-pager-view';
@@ -23,10 +23,36 @@ export default function HomeScreen() {
     const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [tempDate, setTempDate] = useState(new Date());
+    const [targetPage, setTargetPage] = useState<number | null>(null);
     const insets = useSafeAreaInsets();
 
     const tasks = useTaskStore((state) => state.tasks);
     const setReminderId = useTaskStore((state) => state.setReminderId);
+
+    // Reset targetPage when we reach the destination
+    useEffect(() => {
+        if (targetPage !== null && activePage === targetPage) {
+            setTargetPage(null);
+        }
+    }, [activePage, targetPage]);
+
+    const goToPage = (page: number) => {
+        const diff = Math.abs(page - activePage);
+        if (diff === 0) return;
+
+        // If distance is large, snap instantly to avoid scrolling through empty pages
+        // But render it first (via targetPage) so it's not white
+        if (diff > 5) {
+            setTargetPage(page);
+            // Wait a frame for render, then snap
+            requestAnimationFrame(() => {
+                pagerRef.current?.setPageWithoutAnimation(page);
+            });
+        } else {
+            // Smooth scroll for short distances
+            pagerRef.current?.setPage(page);
+        }
+    };
 
     const handleOpenReminder = (taskId: string) => {
         setSelectedTaskId(taskId);
@@ -70,7 +96,7 @@ export default function HomeScreen() {
             if (selectedDate) {
                 const diff = differenceInCalendarDays(selectedDate, initialDate);
                 const newPage = initialPage + diff;
-                pagerRef.current?.setPage(newPage);
+                goToPage(newPage);
             }
         } else {
             // iOS: Just update temp date, don't close until confirmed
@@ -83,7 +109,7 @@ export default function HomeScreen() {
     const handleIOSDateConfirm = () => {
         const diff = differenceInCalendarDays(tempDate, initialDate);
         const newPage = initialPage + diff;
-        pagerRef.current?.setPage(newPage);
+        goToPage(newPage);
         setShowDatePicker(false);
     };
 
@@ -91,7 +117,7 @@ export default function HomeScreen() {
         const today = new Date();
         const diff = differenceInCalendarDays(today, initialDate);
         const todayPage = initialPage + diff;
-        pagerRef.current?.setPage(todayPage);
+        goToPage(todayPage);
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     };
 
@@ -116,8 +142,12 @@ export default function HomeScreen() {
                         const date = addDays(initialDate, dayOffset);
 
                         // Only render components close to current page (Windowing)
-                        // Keeps memory usage low and performance high
-                        const shouldRender = Math.abs(index - activePage) <= 2;
+                        // OR close to the target page we are jumping to
+                        const isCloseToActive = Math.abs(index - activePage) <= 2;
+                        const isCloseToTarget = targetPage !== null && Math.abs(index - targetPage) <= 2;
+
+                        // We render if it's close to EITHER the current view or the destination
+                        const shouldRender = isCloseToActive || isCloseToTarget;
 
                         if (!shouldRender) {
                             return <View key={index} style={{ flex: 1 }} />;
