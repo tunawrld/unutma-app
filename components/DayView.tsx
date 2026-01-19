@@ -1,20 +1,22 @@
 import { Colors } from '@/constants/Colors';
-// Smart Parsing Logic V3 Implemented
 import { useTaskStore } from '@/store/taskStore';
-import { RecurrenceType } from '@/types';
-import { schedulePushNotification } from '@/utils/notifications';
+import { Task } from '@/types';
+import { cancelNotification, schedulePushNotification } from '@/utils/notifications';
 import { Ionicons } from '@expo/vector-icons';
 import { addDays, addMonths, addWeeks, addYears, differenceInCalendarDays, format, isToday, isTomorrow, isYesterday, setHours, setMinutes } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import * as Haptics from 'expo-haptics';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Animated, FlatList, Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Animated, Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import DraggableFlatList, { RenderItemParams } from 'react-native-draggable-flatlist';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import OverdueModal from './OverdueModal';
 import TaskItem from './TaskItem';
 
 interface DayViewProps {
     date: Date;
-    onOpenReminder: (taskId: string) => void;
+    onOpenReminder: (taskId: string, y?: number) => void;
     onGoToToday?: () => void;
     onOpenCalendar?: () => void;
     onTaskComplete?: () => void;
@@ -31,25 +33,39 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar, onTaskComp
     const setReminderId = useTaskStore((state) => state.setReminderId);
     const moveTaskToDate = useTaskStore((state) => state.moveTaskToDate);
     const restoreLastDeletedTask = useTaskStore((state) => state.restoreLastDeletedTask);
+    const reorderTasks = useTaskStore((state) => state.reorderTasks);
+    const insets = useSafeAreaInsets();
 
     const [showOverdueModal, setShowOverdueModal] = useState(false);
 
-    const handleToggleTask = (id: string) => {
+    const handleToggleTask = useCallback(async (id: string) => {
         const task = tasks.find(t => t.id === id);
         const isCompleting = task?.status === 'pending';
+
+        // If completing and has a reminder, cancel it
+        if (isCompleting && task?.reminderId) {
+            await cancelNotification(task.reminderId);
+            setReminderId(id, undefined, undefined);
+        }
 
         toggleTaskStore(id);
 
         if (isCompleting && onTaskComplete) {
             onTaskComplete();
         }
-    };
+    }, [tasks, setReminderId, toggleTaskStore, onTaskComplete]);
 
     // --- Undo Logic (Toast) ---
     const [showUndo, setShowUndo] = useState(false);
     const undoOpacity = useRef(new Animated.Value(0)).current;
 
-    const handleDeleteWithUndo = (id: string) => {
+    const handleDeleteWithUndo = useCallback(async (id: string) => {
+        // Cancel notification if exists
+        const task = tasks.find(t => t.id === id);
+        if (task?.reminderId) {
+            await cancelNotification(task.reminderId);
+        }
+
         deleteTask(id);
         setShowUndo(true);
         // Reset opacity before animating
@@ -69,16 +85,16 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar, onTaskComp
                 useNativeDriver: true,
             }).start(() => setShowUndo(false));
         }, 4000);
-    };
+    }, [tasks, deleteTask, undoOpacity]);
 
-    const handleUndo = () => {
+    const handleUndo = useCallback(() => {
         restoreLastDeletedTask();
         Animated.timing(undoOpacity, {
             toValue: 0,
             duration: 200,
             useNativeDriver: true,
         }).start(() => setShowUndo(false));
-    };
+    }, [restoreLastDeletedTask, undoOpacity]);
     // -------------------------
 
     const [newTaskText, setNewTaskText] = useState('');
@@ -130,7 +146,6 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar, onTaskComp
         let targetDate = date;
         let reminderDate: Date | null = null;
         let finalTaskText = originalText;
-        let recurrence: RecurrenceType = null;
 
         const now = new Date();
 
@@ -139,14 +154,7 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar, onTaskComp
             return text.includes(`${keyword} için`) || text.includes(`için ${keyword}`);
         };
 
-        // 0. Recurrence Detection
-        if (lowerText.includes('her gün')) {
-            recurrence = 'daily';
-        } else if (lowerText.includes('her hafta')) {
-            recurrence = 'weekly';
-        } else if (lowerText.includes('her ay')) {
-            recurrence = 'monthly';
-        }
+
 
         // 1. TARİH TESPİTİ (Gelişmiş versiyon)
         let dayFound = false;
@@ -281,8 +289,8 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar, onTaskComp
         // Target Date Key'i güncelle
         const targetDateKey = format(targetDate, 'yyyy-MM-dd');
 
-        // Store'a ekle (Recurrence ile)
-        const taskId = addTask(finalTaskText, targetDateKey, 'none', recurrence);
+        // Store'a ekle
+        const taskId = addTask(finalTaskText, targetDateKey, 'none');
 
         // Bildirim kur
         if (reminderDate && taskId) {
@@ -306,33 +314,57 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar, onTaskComp
             const dateStr = format(targetDate, 'd MMMM EEEE', { locale: tr });
             Alert.alert(
                 "Planlandı 📅",
-                `"${finalTaskText}" görevi ${dateStr} tarihine eklendi.${recurrence ? '\n(Tekrarlayan Görev)' : ''}`,
+                `"${finalTaskText}" görevi ${dateStr} tarihine eklendi.`,
                 [{ text: "Tamam" }]
             );
         }
     };
 
-    const handleLongPress = (id: string) => {
-        onOpenReminder(id);
-    };
+    const handleLongPress = useCallback((id: string, y?: number) => {
+        onOpenReminder(id, y);
+    }, [onOpenReminder]);
 
-    const handleEditStart = (taskId: string) => {
+    const handleEditStart = useCallback((taskId: string) => {
         setIsAnyTaskEditing(true);
         const index = dayTasks.findIndex(t => t.id === taskId);
         if (index !== -1 && flatListRef.current) {
             setTimeout(() => {
-                flatListRef.current?.scrollToIndex({
-                    index,
-                    animated: true,
-                    viewPosition: 0.5,
-                });
+                // DraggableFlatList might not have scrollToIndex
+                if (flatListRef.current?.scrollToIndex) {
+                    flatListRef.current?.scrollToIndex({
+                        index,
+                        animated: true,
+                        viewPosition: 0.5,
+                    });
+                }
             }, 100);
         }
-    };
+    }, [dayTasks]);
 
-    const handleEditEnd = () => {
+    const handleEditEnd = useCallback(() => {
         setIsAnyTaskEditing(false);
-    };
+    }, []);
+
+    const handleDragEnd = useCallback(({ data }: { data: Task[] }) => {
+        reorderTasks(dateKey, data);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }, [reorderTasks, dateKey]);
+
+    const renderItem = useCallback(({ item, drag, isActive }: RenderItemParams<Task>) => (
+        <TaskItem
+            task={item}
+            onToggle={handleToggleTask}
+            onDelete={handleDeleteWithUndo}
+            onLongPress={handleLongPress}
+            onUpdate={updateTask}
+            onEditStart={handleEditStart}
+            onEditEnd={handleEditEnd}
+            onDrag={drag}
+            isDragging={isActive}
+        />
+    ), [handleToggleTask, handleDeleteWithUndo, handleLongPress, updateTask, handleEditStart, handleEditEnd]);
+
+    const keyExtractor = useCallback((item: Task) => item.id, []);
 
     // Animate bottom input visibility with keyboard
     useEffect(() => {
@@ -384,7 +416,7 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar, onTaskComp
         <KeyboardAvoidingView
             style={styles.container}
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 30}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
         >
             <View style={styles.titleSection}>
                 {showGoToToday && (
@@ -423,36 +455,44 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar, onTaskComp
             </View>
 
             <View style={{ flex: 1 }}>
-                <FlatList
+                <DraggableFlatList
                     ref={flatListRef}
                     data={dayTasks}
-                    keyExtractor={(item) => item.id}
-                    initialNumToRender={10}
-                    maxToRenderPerBatch={10}
-                    windowSize={5}
-                    removeClippedSubviews={false}
+                    keyExtractor={keyExtractor}
+                    onDragEnd={handleDragEnd}
+                    onDragBegin={() => Haptics.selectionAsync()}
+                    renderItem={renderItem}
+                    initialNumToRender={12}
+                    maxToRenderPerBatch={12}
+                    windowSize={7}
+                    removeClippedSubviews={Platform.OS === 'android'}
+                    activationDistance={10}
+                    containerStyle={styles.list}
+                    contentContainerStyle={[styles.listContent, dayTasks.length === 0 && styles.listContentEmpty]}
+                    keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode="on-drag"
+                    showsVerticalScrollIndicator={false}
+                    animationConfig={{
+                        damping: 20,
+                        stiffness: 150,
+                        mass: 0.2,
+                    }}
                     ListEmptyComponent={
                         <View style={styles.emptyContainer}>
                             <Ionicons name="sparkles-outline" size={48} color={Colors.textMuted + '40'} />
                             <Text style={styles.emptyText}>Henüz bir plan yok</Text>
                         </View>
                     }
-                    renderItem={({ item }) => (
-                        <TaskItem
-                            task={item}
-                            onToggle={handleToggleTask}
-                            onDelete={handleDeleteWithUndo}
-                            onLongPress={handleLongPress}
-                            onUpdate={updateTask}
-                            onEditStart={handleEditStart}
-                            onEditEnd={handleEditEnd}
-                        />
-                    )}
-                    style={styles.list}
-                    contentContainerStyle={[styles.listContent, dayTasks.length === 0 && styles.listContentEmpty]}
-                    keyboardShouldPersistTaps="handled"
-                    keyboardDismissMode="on-drag"
-                    onScrollToIndexFailed={() => { }}
+                />
+                <LinearGradient
+                    colors={[Colors.backgroundDark, Colors.backgroundDark + '00']}
+                    style={styles.topGradient}
+                    pointerEvents="none"
+                />
+                <LinearGradient
+                    colors={[Colors.backgroundDark + '00', Colors.backgroundDark]}
+                    style={styles.bottomGradient}
+                    pointerEvents="none"
                 />
             </View>
 
@@ -462,6 +502,7 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar, onTaskComp
                     {
                         opacity: inputOpacity,
                         transform: [{ translateY: inputTranslateY }],
+                        paddingBottom: isInputFocused ? 0 : (insets.bottom || 24),
                     }
                 ]}
                 pointerEvents={isAnyTaskEditing ? 'none' : 'auto'}
@@ -502,6 +543,7 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar, onTaskComp
                 tasks={overdueTasks}
                 onClose={() => setShowOverdueModal(false)}
                 onMoveAllToToday={handleMoveOverdueToToday}
+                onToggleTask={handleToggleTask}
             />
         </KeyboardAvoidingView>
     );
@@ -543,12 +585,12 @@ const styles = StyleSheet.create({
         paddingHorizontal: 24,
     },
     listContent: {
-        paddingBottom: 120,
+        paddingBottom: 90,
     },
     bottomInputContainer: {
         paddingHorizontal: 24,
         paddingTop: 24,
-        paddingBottom: 60,
+        paddingBottom: 32,
         width: '100%',
     },
     inputPlaceholder: {
@@ -632,5 +674,20 @@ const styles = StyleSheet.create({
         marginTop: 12,
         fontWeight: '500',
     },
-
+    topGradient: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 60,
+        zIndex: 1,
+    },
+    bottomGradient: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: 60,
+        zIndex: 1,
+    },
 });

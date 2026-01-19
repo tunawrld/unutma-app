@@ -2,22 +2,24 @@ import { Colors } from '@/constants/Colors';
 import { Task } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 interface TaskItemProps {
     task: Task;
     onToggle: (id: string) => void;
     onDelete: (id: string) => void;
-    onLongPress: (id: string) => void;
+    onLongPress: (id: string, y?: number) => void;
     onUpdate: (id: string, text: string) => void;
     onEditStart?: (id: string) => void;
     onEditEnd?: () => void;
+    onDrag?: () => void;
+    isDragging?: boolean;
 }
 
 const ITEM_HEIGHT = 56;
 
-function TaskItem({ task, onToggle, onDelete, onLongPress, onUpdate, onEditStart, onEditEnd }: TaskItemProps) {
+function TaskItem({ task, onToggle, onDelete, onLongPress, onUpdate, onEditStart, onEditEnd, onDrag, isDragging }: TaskItemProps) {
     const [isEditing, setIsEditing] = useState(false);
     const [editText, setEditText] = useState(task.text);
     const [now, setNow] = useState(Date.now());
@@ -32,9 +34,11 @@ function TaskItem({ task, onToggle, onDelete, onLongPress, onUpdate, onEditStart
         onToggle(task.id);
     };
 
-    const handleLongPress = () => {
+    const handleLongPress = (event: any) => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        onLongPress(task.id);
+        // Get the absolute Y position of the touch
+        const { pageY } = event.nativeEvent;
+        onLongPress(task.id, pageY);
     };
 
     const handleTextPress = () => {
@@ -55,36 +59,42 @@ function TaskItem({ task, onToggle, onDelete, onLongPress, onUpdate, onEditStart
         onEditEnd?.();
     };
 
-    // Only show reminder if we have a date and it's in the future
-    // 'now' comes from state for auto-updates
-    const hasReminder = !!task.reminderId && !!task.reminderDate;
-    const showReminder = hasReminder;
+    // Memoize reminder calculations to avoid recalculating on every render
+    const reminderInfo = useMemo(() => {
+        const hasReminder = !!task.reminderId && !!task.reminderDate;
+        const showReminder = hasReminder && task.status !== 'completed';
 
-    let timeLeft = '';
-    let reminderColor = Colors.primary;
-    let iconName: keyof typeof Ionicons.glyphMap = 'alarm-outline';
+        if (!showReminder || !task.reminderDate) {
+            return { showReminder: false, timeLeft: '', color: Colors.primary, icon: 'alarm-outline' as const };
+        }
 
-    if (showReminder && task.reminderDate) {
+        let timeLeft = '';
+        let color = Colors.primary;
+        let icon: keyof typeof Ionicons.glyphMap = 'alarm-outline';
+
         if (task.reminderDate <= now) {
-            // Expired
-            reminderColor = Colors.textMuted;
+            color = Colors.textMuted;
             timeLeft = 'Süre Doldu';
-            iconName = 'checkmark-circle-outline';
+            icon = 'checkmark-circle-outline';
         } else {
             const diffMins = Math.ceil((task.reminderDate - now) / 60000);
 
-            if (diffMins <= 60) reminderColor = Colors.red;
-            else if (diffMins <= 360) reminderColor = Colors.yellow;
-            else reminderColor = Colors.primary; // Green/Safe
+            if (diffMins <= 60) color = Colors.red;
+            else if (diffMins <= 360) color = Colors.yellow;
+            else color = Colors.primary;
 
             if (diffMins < 60) timeLeft = `${diffMins}dk`;
             else if (diffMins < 24 * 60) timeLeft = `${Math.floor(diffMins / 60)}sa`;
             else timeLeft = `${Math.floor(diffMins / (24 * 60))}g`;
         }
-    }
+
+        return { showReminder, timeLeft, color, icon };
+    }, [task.reminderId, task.reminderDate, task.status, now]);
+
+    const { showReminder, timeLeft, color: reminderColor, icon: iconName } = reminderInfo;
 
     return (
-        <View style={styles.taskContainer}>
+        <View style={[styles.taskContainer, isDragging && styles.taskContainerDragging]}>
             <View style={styles.contentContainer}>
                 {/* Checkbox - Only this toggles task */}
                 <Pressable
@@ -128,12 +138,6 @@ function TaskItem({ task, onToggle, onDelete, onLongPress, onUpdate, onEditStart
 
                         {/* Reminder Indicator */}
                         <View style={styles.metaContainer}>
-                            {task.recurrence && (
-                                <View style={styles.recurrenceBadge}>
-                                    <Ionicons name="repeat" size={12} color={Colors.textMuted} />
-                                </View>
-                            )}
-
                             {showReminder && (
                                 <View style={[styles.reminderContainer, { backgroundColor: reminderColor + '15' }]}>
                                     <Text style={[styles.reminderText, { color: reminderColor }]}>{timeLeft}</Text>
@@ -141,6 +145,16 @@ function TaskItem({ task, onToggle, onDelete, onLongPress, onUpdate, onEditStart
                                 </View>
                             )}
                         </View>
+                    </Pressable>
+                )}
+
+                {/* Drag Handle - Right side icon */}
+                {onDrag && (
+                    <Pressable
+                        onPressIn={onDrag}
+                        style={styles.dragHandle}
+                    >
+                        <Ionicons name="menu" size={20} color={isDragging ? Colors.primary : Colors.textMuted + '60'} />
                     </Pressable>
                 )}
             </View>
@@ -156,7 +170,28 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         marginBottom: 8,
     },
-
+    taskContainerDragging: {
+        opacity: 0.9,
+        backgroundColor: Colors.backgroundDark,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: Colors.primary + '60',
+        shadowColor: "#000",
+        shadowOffset: {
+            width: 0,
+            height: 5,
+        },
+        shadowOpacity: 0.34,
+        shadowRadius: 6.27,
+        elevation: 10,
+    },
+    dragHandle: {
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        marginLeft: 8,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
     contentContainer: {
         flex: 1,
         flexDirection: 'row',
@@ -225,10 +260,5 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: 6,
         marginLeft: 8,
-    },
-    recurrenceBadge: {
-        padding: 4,
-        backgroundColor: Colors.textMuted + '15',
-        borderRadius: 6,
     },
 });

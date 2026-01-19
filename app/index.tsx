@@ -5,14 +5,13 @@ import ReminderBottomSheet from '@/components/ReminderBottomSheet';
 import WelcomeScreen from '@/components/WelcomeScreen';
 import { Colors } from '@/constants/Colors';
 import { useTaskStore } from '@/store/taskStore';
-import { RecurrenceType } from '@/types';
 import { cancelNotification, schedulePushNotification } from '@/utils/notifications';
 import BottomSheet from '@gorhom/bottom-sheet';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { addDays, differenceInCalendarDays, format } from 'date-fns';
 import * as Haptics from 'expo-haptics';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import PagerView from 'react-native-pager-view';
@@ -36,7 +35,6 @@ export default function HomeScreen() {
     const setReminderId = useTaskStore((state) => state.setReminderId);
     const moveTaskToDate = useTaskStore((state) => state.moveTaskToDate);
     const deleteTask = useTaskStore((state) => state.deleteTask);
-    const setRecurrence = useTaskStore((state) => state.setRecurrence);
     const restoreLastDeletedTask = useTaskStore((state) => state.restoreLastDeletedTask);
 
     useEffect(() => {
@@ -51,7 +49,7 @@ export default function HomeScreen() {
     const lastComboTime = useRef(0);
     const comboCountRef = useRef(0);
 
-    const handleTaskComplete = async () => {
+    const handleTaskComplete = useCallback(async () => {
         const now = Date.now();
         // Reset combo if more than 2 seconds passed
         if (now - lastComboTime.current < 2000) {
@@ -72,14 +70,20 @@ export default function HomeScreen() {
         } else if (comboCountRef.current > 3) {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         }
-    };
+    }, [setComboCount, setComboVisible]);
     // -------------------
 
     // --- Global Undo Logic ---
     const [showUndo, setShowUndo] = useState(false);
     const undoOpacity = useRef(new Animated.Value(0)).current;
 
-    const handleGlobalDeleteTask = (id: string) => {
+    const handleGlobalDeleteTask = useCallback(async (id: string) => {
+        // Cancel notification if exists
+        const task = tasks.find(t => t.id === id);
+        if (task?.reminderId) {
+            await cancelNotification(task.reminderId);
+        }
+
         deleteTask(id);
         setShowUndo(true);
         undoOpacity.setValue(0);
@@ -98,7 +102,7 @@ export default function HomeScreen() {
                 useNativeDriver: true,
             }).start(() => setShowUndo(false));
         }, 4000);
-    };
+    }, [tasks, deleteTask, undoOpacity]);
 
     const handleGlobalUndo = () => {
         restoreLastDeletedTask();
@@ -157,19 +161,16 @@ export default function HomeScreen() {
         });
     };
 
-    const handleOpenReminder = (taskId: string) => {
+    const handleOpenReminder = useCallback((taskId: string) => {
         setSelectedTaskId(taskId);
         setIsSheetOpen(true);
         bottomSheetRef.current?.expand();
-    };
+    }, [setSelectedTaskId, setIsSheetOpen]);
 
-    const handleSaveReminder = async (reminderDate: Date, recurrence: RecurrenceType) => {
+    const handleSaveReminder = async (reminderDate: Date) => {
         if (selectedTaskId) {
             const task = tasks.find(t => t.id === selectedTaskId);
             if (task) {
-                // Update Recurrence
-                setRecurrence(selectedTaskId, recurrence);
-
                 if (task.reminderId) {
                     await cancelNotification(task.reminderId);
                 }
@@ -271,13 +272,13 @@ export default function HomeScreen() {
         }
     };
 
-    const handleGoToToday = () => {
+    const handleGoToToday = useCallback(() => {
         const today = new Date();
         const diff = differenceInCalendarDays(today, initialDate);
         const todayPage = initialPage + diff;
         goToPage(todayPage);
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    };
+    }, [initialDate, initialPage, goToPage]);
 
     return (
         <GestureHandlerRootView style={styles.container}>
@@ -362,7 +363,6 @@ export default function HomeScreen() {
                 isOpen={isSheetOpen}
                 taskText={selectedTask?.text || ''}
                 existingDate={selectedTask?.reminderDate}
-                existingRecurrence={selectedTask?.recurrence}
                 onSave={handleSaveReminder}
                 onCancel={handleCancelReminder}
                 onDelete={handleDeleteTask}

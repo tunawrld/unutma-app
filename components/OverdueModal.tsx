@@ -3,6 +3,7 @@ import { Task } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
+import * as Haptics from 'expo-haptics';
 import React from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -11,10 +12,16 @@ interface OverdueModalProps {
     tasks: Task[];
     onClose: () => void;
     onMoveAllToToday: () => void;
+    onToggleTask?: (id: string) => void;
 }
 
-export default function OverdueModal({ visible, tasks, onClose, onMoveAllToToday }: OverdueModalProps) {
+export default function OverdueModal({ visible, tasks, onClose, onMoveAllToToday, onToggleTask }: OverdueModalProps) {
     if (tasks.length === 0) return null;
+
+    const handleToggle = (id: string) => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        onToggleTask?.(id);
+    };
 
     return (
         <Modal
@@ -43,15 +50,39 @@ export default function OverdueModal({ visible, tasks, onClose, onMoveAllToToday
 
                     <View style={styles.list}>
                         {tasks.map(task => (
-                            <View key={task.id} style={styles.item}>
-                                <View style={styles.itemDot} />
+                            <Pressable
+                                key={task.id}
+                                style={styles.item}
+                                onPress={() => handleToggle(task.id)}
+                            >
+                                {/* Checkbox */}
+                                <Pressable
+                                    onPress={() => handleToggle(task.id)}
+                                    style={[
+                                        styles.checkbox,
+                                        task.status === 'completed' && styles.checkboxCompleted
+                                    ]}
+                                >
+                                    {task.status === 'completed' && (
+                                        <Ionicons name="checkmark" size={16} color={Colors.primary} />
+                                    )}
+                                </Pressable>
+
                                 <View style={styles.itemContent}>
-                                    <Text style={styles.itemText} numberOfLines={1}>{task.text}</Text>
+                                    <Text
+                                        style={[
+                                            styles.itemText,
+                                            task.status === 'completed' && styles.itemTextCompleted
+                                        ]}
+                                        numberOfLines={1}
+                                    >
+                                        {task.text}
+                                    </Text>
                                     <Text style={styles.itemDate}>
                                         {format(new Date(task.date), 'd MMMM', { locale: tr })}
                                     </Text>
                                 </View>
-                            </View>
+                            </Pressable>
                         ))}
                     </View>
 
@@ -132,11 +163,19 @@ const styles = StyleSheet.create({
         backgroundColor: Colors.white + '05',
         borderRadius: 12,
     },
-    itemDot: {
-        width: 6,
-        height: 6,
-        borderRadius: 3,
-        backgroundColor: Colors.red,
+    checkbox: {
+        width: 22,
+        height: 22,
+        borderRadius: 11,
+        borderWidth: 1.5,
+        borderColor: Colors.textMuted + '50',
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'transparent',
+    },
+    checkboxCompleted: {
+        backgroundColor: Colors.primary + '33',
+        borderColor: Colors.primary + '50',
     },
     itemContent: {
         flex: 1,
@@ -145,6 +184,11 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: Colors.textLight,
         fontWeight: '500',
+    },
+    itemTextCompleted: {
+        color: Colors.textMuted,
+        textDecorationLine: 'line-through',
+        textDecorationColor: Colors.primary + '66',
     },
     itemDate: {
         fontSize: 12,
@@ -170,3 +214,4 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
 });
+
