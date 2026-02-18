@@ -1,9 +1,10 @@
-import { Colors } from '@/constants/Colors';
+import { useThemeColors } from '@/hooks/useThemeColors';
 import { Task } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 interface TaskItemProps {
     task: Task;
@@ -20,12 +21,33 @@ interface TaskItemProps {
 const ITEM_HEIGHT = 56;
 
 function TaskItem({ task, onToggle, onDelete, onLongPress, onUpdate, onEditStart, onEditEnd, onDrag, isDragging }: TaskItemProps) {
+    const C = useThemeColors();
     const [isEditing, setIsEditing] = useState(false);
     const [editText, setEditText] = useState(task.text);
     const [now, setNow] = useState(Date.now());
 
+    const dragProgress = useSharedValue(0);
+
     useEffect(() => {
-        const interval = setInterval(() => setNow(Date.now()), 10000); // Check every 10s for updates
+        dragProgress.value = withTiming(isDragging ? 1 : 0, {
+            duration: isDragging ? 150 : 120,
+            easing: isDragging
+                ? Easing.out(Easing.cubic)
+                : Easing.out(Easing.quad),
+        });
+    }, [isDragging]);
+
+    const animatedStyle = useAnimatedStyle(() => ({
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: dragProgress.value * 8 },
+        shadowOpacity: dragProgress.value * 0.28,
+        shadowRadius: dragProgress.value * 12,
+        elevation: dragProgress.value * 12,
+        opacity: 1 - dragProgress.value * 0.1,
+    }));
+
+    useEffect(() => {
+        const interval = setInterval(() => setNow(Date.now()), 10000);
         return () => clearInterval(interval);
     }, []);
 
@@ -36,7 +58,6 @@ function TaskItem({ task, onToggle, onDelete, onLongPress, onUpdate, onEditStart
 
     const handleLongPress = (event: any) => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        // Get the absolute Y position of the touch
         const { pageY } = event.nativeEvent;
         onLongPress(task.id, pageY);
     };
@@ -52,36 +73,34 @@ function TaskItem({ task, onToggle, onDelete, onLongPress, onUpdate, onEditStart
         if (trimmedText) {
             onUpdate(task.id, trimmedText);
         } else {
-            // If text is cleared, delete the task
             onDelete(task.id);
         }
         setIsEditing(false);
         onEditEnd?.();
     };
 
-    // Memoize reminder calculations to avoid recalculating on every render
     const reminderInfo = useMemo(() => {
         const hasReminder = !!task.reminderId && !!task.reminderDate;
         const showReminder = hasReminder && task.status !== 'completed';
 
         if (!showReminder || !task.reminderDate) {
-            return { showReminder: false, timeLeft: '', color: Colors.primary, icon: 'alarm-outline' as const };
+            return { showReminder: false, timeLeft: '', color: C.primary, icon: 'alarm-outline' as const };
         }
 
         let timeLeft = '';
-        let color = Colors.primary;
+        let color = C.primary;
         let icon: keyof typeof Ionicons.glyphMap = 'alarm-outline';
 
         if (task.reminderDate <= now) {
-            color = Colors.textMuted;
+            color = C.textMuted;
             timeLeft = 'Süre Doldu';
             icon = 'checkmark-circle-outline';
         } else {
             const diffMins = Math.ceil((task.reminderDate - now) / 60000);
 
-            if (diffMins <= 60) color = Colors.red;
-            else if (diffMins <= 360) color = Colors.yellow;
-            else color = Colors.primary;
+            if (diffMins <= 60) color = C.red;
+            else if (diffMins <= 360) color = C.yellow;
+            else color = C.primary;
 
             if (diffMins < 60) timeLeft = `${diffMins}dk`;
             else if (diffMins < 24 * 60) timeLeft = `${Math.floor(diffMins / 60)}sa`;
@@ -89,32 +108,40 @@ function TaskItem({ task, onToggle, onDelete, onLongPress, onUpdate, onEditStart
         }
 
         return { showReminder, timeLeft, color, icon };
-    }, [task.reminderId, task.reminderDate, task.status, now]);
+    }, [task.reminderId, task.reminderDate, task.status, now, C]);
 
     const { showReminder, timeLeft, color: reminderColor, icon: iconName } = reminderInfo;
 
     return (
-        <View style={[styles.taskContainer, isDragging && styles.taskContainerDragging]}>
+        <Animated.View style={[styles.taskContainer, isDragging && styles.taskContainerDragging, animatedStyle]}>
             <View style={styles.contentContainer}>
-                {/* Checkbox - Only this toggles task */}
+                {/* Checkbox */}
                 <Pressable
                     onPress={handleToggle}
                     onLongPress={handleLongPress}
                     delayLongPress={500}
                     style={[
                         styles.checkbox,
-                        task.status === 'completed' && styles.checkboxCompleted
+                        { borderColor: C.textMuted + '50' },
+                        task.status === 'completed' && { backgroundColor: C.primary + '33', borderColor: C.primary + '50' }
                     ]}
                 >
                     {task.status === 'completed' && (
-                        <Ionicons name="checkmark" size={18} color={Colors.primary} />
+                        <Ionicons name="checkmark" size={18} color={C.primary} />
                     )}
                 </Pressable>
 
-                {/* Task Text - Clicking opens edit mode */}
+                {/* Task Text */}
                 {isEditing ? (
                     <TextInput
-                        style={styles.taskInput}
+                        style={[
+                            styles.taskInput,
+                            {
+                                color: C.textLight,
+                                backgroundColor: C.inputBg,
+                                borderColor: C.primary + '50',
+                            }
+                        ]}
                         value={editText}
                         onChangeText={setEditText}
                         onBlur={handleSaveEdit}
@@ -131,12 +158,12 @@ function TaskItem({ task, onToggle, onDelete, onLongPress, onUpdate, onEditStart
                     >
                         <Text style={[
                             styles.taskText,
-                            task.status === 'completed' && styles.taskTextCompleted
+                            { color: C.textLight },
+                            task.status === 'completed' && { color: C.textMuted, textDecorationLine: 'line-through', textDecorationColor: C.primary + '66' }
                         ]}>
                             {task.text}
                         </Text>
 
-                        {/* Reminder Indicator */}
                         <View style={styles.metaContainer}>
                             {showReminder && (
                                 <View style={[styles.reminderContainer, { backgroundColor: reminderColor + '15' }]}>
@@ -148,17 +175,17 @@ function TaskItem({ task, onToggle, onDelete, onLongPress, onUpdate, onEditStart
                     </Pressable>
                 )}
 
-                {/* Drag Handle - Right side icon */}
+                {/* Drag Handle */}
                 {onDrag && (
                     <Pressable
                         onPressIn={onDrag}
                         style={styles.dragHandle}
                     >
-                        <Ionicons name="menu" size={20} color={isDragging ? Colors.primary : Colors.textMuted + '60'} />
+                        <Ionicons name="menu" size={20} color={isDragging ? C.primary : C.textMuted + '60'} />
                     </Pressable>
                 )}
             </View>
-        </View>
+        </Animated.View>
     );
 }
 
@@ -170,21 +197,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         marginBottom: 8,
     },
-    taskContainerDragging: {
-        opacity: 0.9,
-        backgroundColor: Colors.backgroundDark,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: Colors.primary + '60',
-        shadowColor: "#000",
-        shadowOffset: {
-            width: 0,
-            height: 5,
-        },
-        shadowOpacity: 0.34,
-        shadowRadius: 6.27,
-        elevation: 10,
-    },
+    taskContainerDragging: {},
     dragHandle: {
         paddingHorizontal: 8,
         paddingVertical: 4,
@@ -205,43 +218,28 @@ const styles = StyleSheet.create({
     },
     taskInput: {
         flex: 1,
-        color: Colors.textLight,
         fontSize: 17,
         fontWeight: '400',
         paddingVertical: 4,
         paddingHorizontal: 8,
-        backgroundColor: Colors.backgroundDark,
         borderRadius: 4,
         borderWidth: 1,
-        borderColor: Colors.primary + '50',
     },
-
     checkbox: {
         width: 24,
         height: 24,
         borderRadius: 12,
         borderWidth: 1.5,
-        borderColor: Colors.textMuted + '50',
         marginRight: 16,
         justifyContent: 'center',
         alignItems: 'center',
         backgroundColor: 'transparent',
     },
-    checkboxCompleted: {
-        backgroundColor: Colors.primary + '33',
-        borderColor: Colors.primary + '50',
-    },
     taskText: {
-        color: Colors.textLight,
         fontSize: 17,
         fontWeight: '400',
         flex: 1,
         lineHeight: 24,
-    },
-    taskTextCompleted: {
-        color: Colors.textMuted,
-        textDecorationLine: 'line-through',
-        textDecorationColor: Colors.primary + '66',
     },
     reminderContainer: {
         flexDirection: 'row',

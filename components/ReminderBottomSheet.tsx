@@ -1,4 +1,4 @@
-import { Colors } from '@/constants/Colors';
+import { useThemeColors } from '@/hooks/useThemeColors';
 
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet, { BottomSheetBackdrop, BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
@@ -7,7 +7,7 @@ import { addDays, addHours, format, isToday, isTomorrow, setHours, setMinutes } 
 import { tr } from 'date-fns/locale';
 import * as Haptics from 'expo-haptics';
 import React, { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
-import { Keyboard, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Keyboard, Platform, Pressable, StyleSheet, Text, useColorScheme, View } from 'react-native';
 
 interface ReminderBottomSheetProps {
     taskText: string;
@@ -23,11 +23,12 @@ interface ReminderBottomSheetProps {
 
 const ReminderBottomSheet = forwardRef<BottomSheet, ReminderBottomSheetProps>(
     ({ taskText, onSave, onCancel, isOpen, existingDate, onMoveToTomorrow, onDelete, onRemoveReminder, onSheetChange }, ref) => {
+        const C = useThemeColors();
+        const colorScheme = useColorScheme();
         const [snapPoints, setSnapPoints] = useState(['65%']);
         const [selectedDate, setSelectedDate] = useState(new Date());
         const [taskInputText, setTaskInputText] = useState(taskText);
 
-        // iOS & Android State unified
         const [activePickerMode, setActivePickerMode] = useState<'date' | 'time' | null>(null);
 
         const scrollViewRef = useRef<any>(null);
@@ -45,12 +46,10 @@ const ReminderBottomSheet = forwardRef<BottomSheet, ReminderBottomSheetProps>(
             []
         );
 
-        // Sync task text whenever it changes
         useEffect(() => {
             setTaskInputText(taskText);
         }, [taskText]);
 
-        // Reset date and picker mode when modal opens
         useEffect(() => {
             if (isOpen) {
                 setSelectedDate(new Date());
@@ -58,7 +57,6 @@ const ReminderBottomSheet = forwardRef<BottomSheet, ReminderBottomSheetProps>(
             }
         }, [isOpen]);
 
-        // Keyboard handling
         useEffect(() => {
             const keyboardWillShow = Keyboard.addListener(
                 Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
@@ -88,13 +86,11 @@ const ReminderBottomSheet = forwardRef<BottomSheet, ReminderBottomSheetProps>(
 
         const handleDatePress = () => {
             Haptics.selectionAsync();
-            // Toggle or switch to date
             setActivePickerMode(activePickerMode === 'date' ? null : 'date');
         };
 
         const handleTimePress = () => {
             Haptics.selectionAsync();
-            // Toggle or switch to time
             setActivePickerMode(activePickerMode === 'time' ? null : 'time');
         };
 
@@ -114,9 +110,6 @@ const ReminderBottomSheet = forwardRef<BottomSheet, ReminderBottomSheetProps>(
             { label: 'Haftaya', action: () => setSelectedDate(addDays(new Date(), 7)) },
         ];
 
-
-
-        // Format logic for Display Card
         let dateLabel = format(selectedDate, 'd MMMM EEEE', { locale: tr });
         if (isToday(selectedDate)) dateLabel = 'Bugün';
         if (isTomorrow(selectedDate)) dateLabel = 'Yarın';
@@ -129,11 +122,11 @@ const ReminderBottomSheet = forwardRef<BottomSheet, ReminderBottomSheetProps>(
                 index={-1}
                 snapPoints={snapPoints}
                 onChange={onSheetChange}
-                enablePanDownToClose={!activePickerMode} // Disable closing while picking
-                enableContentPanningGesture={!activePickerMode} // Disable sheet pan while picking
+                enablePanDownToClose={!activePickerMode}
+                enableContentPanningGesture={!activePickerMode}
                 backdropComponent={renderBackdrop}
-                backgroundStyle={styles.bottomSheetBackground}
-                handleIndicatorStyle={styles.handleIndicator}
+                backgroundStyle={[styles.bottomSheetBackground, { backgroundColor: C.sheetDark }]}
+                handleIndicatorStyle={[styles.handleIndicator, { backgroundColor: C.border + '20' }]}
                 keyboardBehavior="fillParent"
                 keyboardBlurBehavior="restore"
                 android_keyboardInputMode="adjustResize"
@@ -148,9 +141,9 @@ const ReminderBottomSheet = forwardRef<BottomSheet, ReminderBottomSheetProps>(
                     <View style={styles.inputSection}>
                         <BottomSheetTextInput
                             ref={inputRef}
-                            style={styles.taskInput}
+                            style={[styles.taskInput, { color: C.textLight }]}
                             placeholder="Unutmadan yaz..."
-                            placeholderTextColor={Colors.white + '33'}
+                            placeholderTextColor={C.textMuted + '80'}
                             value={taskInputText}
                             onChangeText={setTaskInputText}
                             multiline
@@ -166,52 +159,55 @@ const ReminderBottomSheet = forwardRef<BottomSheet, ReminderBottomSheetProps>(
                     <View style={styles.reminderSection}>
                         {!!existingDate && existingDate > Date.now() && (
                             <View style={styles.existingReminderContainer}>
-                                <View style={styles.existingReminderBanner}>
-                                    <Ionicons name="checkmark-circle-outline" size={18} color={Colors.primary} />
-                                    <Text style={styles.existingReminderText}>
+                                <View style={[styles.existingReminderBanner, { backgroundColor: C.primary + '15', borderColor: C.primary + '20' }]}>
+                                    <Ionicons name="checkmark-circle-outline" size={18} color={C.primary} />
+                                    <Text style={[styles.existingReminderText, { color: C.primary }]}>
                                         Zamanlandı: {format(existingDate, 'd MMMM HH:mm', { locale: tr })}
                                     </Text>
                                 </View>
                                 {onRemoveReminder && (
                                     <Pressable
-                                        style={styles.removeReminderButton}
+                                        style={[styles.removeReminderButton, { backgroundColor: C.border + '08' }]}
                                         onPress={() => {
                                             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                                             onRemoveReminder();
                                         }}
                                     >
-                                        <Ionicons name="close-circle" size={20} color={Colors.white + '80'} />
+                                        <Ionicons name="close-circle" size={20} color={C.textMuted} />
                                     </Pressable>
                                 )}
                             </View>
                         )}
 
                         <View style={styles.reminderHeader}>
-                            <Ionicons name="notifications-outline" size={20} color={Colors.primary} />
-                            <Text style={styles.reminderLabel}>Zamanlayıcı</Text>
+                            <Ionicons name="notifications-outline" size={20} color={C.primary} />
+                            <Text style={[styles.reminderLabel, { color: C.primary }]}>Zamanlayıcı</Text>
                         </View>
 
                         {/* Large Date Display Card */}
-                        <View style={styles.dateDisplayCard}>
+                        <View style={[styles.dateDisplayCard, { backgroundColor: C.border + '08', borderColor: C.border + '0D' }]}>
                             <Pressable style={styles.dateInfoLeft} onPress={handleDatePress}>
-                                <Text style={styles.dateLabelText}>{dateLabel}</Text>
-                                <Text style={styles.fullDateText}>{format(selectedDate, 'd MMMM yyyy', { locale: tr })}</Text>
+                                <Text style={[styles.dateLabelText, { color: C.textLight }]}>{dateLabel}</Text>
+                                <Text style={[styles.fullDateText, { color: C.textMuted }]}>{format(selectedDate, 'd MMMM yyyy', { locale: tr })}</Text>
                             </Pressable>
-                            <Pressable style={styles.timeInfoRight} onPress={handleTimePress}>
-                                <Text style={styles.timeLabelText}>{timeLabel}</Text>
+                            <Pressable
+                                style={[styles.timeInfoRight, { backgroundColor: C.primary + '1A', borderColor: C.primary + '30' }]}
+                                onPress={handleTimePress}
+                            >
+                                <Text style={[styles.timeLabelText, { color: C.primary }]}>{timeLabel}</Text>
                             </Pressable>
                         </View>
 
                         {/* Pickers */}
                         {Platform.OS === 'ios' && activePickerMode && (
-                            <View style={styles.pickerWrapper}>
+                            <View style={[styles.pickerWrapper, { backgroundColor: C.border + '05' }]}>
                                 <DateTimePicker
                                     value={selectedDate}
                                     mode={activePickerMode}
                                     display={activePickerMode === 'date' ? 'inline' : 'spinner'}
                                     onChange={handleDateChange}
-                                    textColor={Colors.white}
-                                    themeVariant="dark"
+                                    textColor={C.textLight}
+                                    themeVariant={colorScheme === 'dark' ? 'dark' : 'light'}
                                     locale="tr-TR"
                                     style={styles.dateTimePicker}
                                 />
@@ -223,48 +219,59 @@ const ReminderBottomSheet = forwardRef<BottomSheet, ReminderBottomSheetProps>(
                                 mode={activePickerMode}
                                 display="default"
                                 onChange={handleDateChange}
-                                textColor={Colors.white}
-                                themeVariant="dark"
+                                textColor={C.textLight}
+                                themeVariant={colorScheme === 'dark' ? 'dark' : 'light'}
                             />
                         )}
 
-                        {/* Quick Suggestions - Grid Layout */}
+                        {/* Quick Suggestions */}
                         <View style={styles.suggestionsContainer}>
                             {quickSuggestions.map((suggestion, index) => (
                                 <Pressable
                                     key={index}
-                                    style={styles.suggestionChip}
+                                    style={[
+                                        styles.suggestionChip,
+                                        { backgroundColor: C.border + '0A', borderColor: C.border + '10' }
+                                    ]}
                                     onPress={() => {
                                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                                         suggestion.action();
                                     }}
                                 >
                                     <View style={styles.chipContent}>
-                                        <Ionicons name="flash-outline" size={12} color={Colors.white + '80'} />
-                                        <Text style={styles.suggestionText}>{suggestion.label}</Text>
+                                        <Ionicons name="flash-outline" size={12} color={C.textMuted} />
+                                        <Text style={[styles.suggestionText, { color: C.textLight }]}>{suggestion.label}</Text>
                                     </View>
                                 </Pressable>
                             ))}
                         </View>
 
-
-
                         {/* Move to Tomorrow Action */}
                         {onMoveToTomorrow && (
                             <Pressable
-                                style={styles.moveToTomorrowButton}
+                                style={[
+                                    styles.moveToTomorrowButton,
+                                    { backgroundColor: C.primary + '20', borderColor: C.primary + '40' }
+                                ]}
                                 onPress={handleMoveToTomorrow}
                             >
-                                <Ionicons name="arrow-forward-outline" size={18} color={Colors.primary} />
-                                <Text style={styles.moveToTomorrowText}>Yarına Aktar</Text>
-                                <Text style={styles.moveToTomorrowSubtext}>Görevi yarın için planla</Text>
+                                <Ionicons name="arrow-forward-outline" size={18} color={C.primary} />
+                                <Text style={[styles.moveToTomorrowText, { color: C.primary }]}>Yarına Aktar</Text>
+                                <Text style={[styles.moveToTomorrowSubtext, { color: C.primary + 'AA' }]}>Görevi yarın için planla</Text>
                             </Pressable>
                         )}
                     </View>
                 </BottomSheetScrollView>
 
-                {/* Fixed Header at Bottom */}
-                <View style={[styles.fixedHeader, { paddingBottom: Platform.OS === 'ios' ? 32 : 24 }]}>
+                {/* Fixed Footer */}
+                <View style={[
+                    styles.fixedHeader,
+                    {
+                        paddingBottom: Platform.OS === 'ios' ? 32 : 24,
+                        backgroundColor: C.sheetDark,
+                        borderTopColor: C.border + '08',
+                    }
+                ]}>
                     <Pressable
                         onPress={() => {
                             if (onDelete) {
@@ -275,11 +282,11 @@ const ReminderBottomSheet = forwardRef<BottomSheet, ReminderBottomSheetProps>(
                         hitSlop={20}
                         style={styles.deleteButtonContainer}
                     >
-                        <Ionicons name="trash-outline" size={18} color={Colors.red} />
-                        <Text style={styles.deleteButton}>Sil</Text>
+                        <Ionicons name="trash-outline" size={18} color={C.red} />
+                        <Text style={[styles.deleteButton, { color: C.red }]}>Sil</Text>
                     </Pressable>
-                    <Pressable onPress={handleSave} style={styles.saveButton}>
-                        <Text style={styles.saveButtonText}>Kaydet</Text>
+                    <Pressable onPress={handleSave} style={[styles.saveButton, { backgroundColor: C.primary }]}>
+                        <Text style={[styles.saveButtonText, { color: C.backgroundDark }]}>Kaydet</Text>
                     </Pressable>
                 </View>
             </BottomSheet>
@@ -289,12 +296,10 @@ const ReminderBottomSheet = forwardRef<BottomSheet, ReminderBottomSheetProps>(
 
 const styles = StyleSheet.create({
     bottomSheetBackground: {
-        backgroundColor: Colors.sheetDark,
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
     },
     handleIndicator: {
-        backgroundColor: Colors.white + '20',
         width: 40,
         height: 4,
         marginTop: 8
@@ -303,7 +308,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 24,
     },
     scrollContent: {
-        paddingBottom: 120, // Extra padding for fixed header at bottom
+        paddingBottom: 120,
     },
     fixedHeader: {
         flexDirection: 'row',
@@ -312,9 +317,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 24,
         paddingTop: 16,
         paddingBottom: 32,
-        backgroundColor: Colors.sheetDark,
         borderTopWidth: 1,
-        borderTopColor: Colors.white + '08',
     },
     deleteButtonContainer: {
         flexDirection: 'row',
@@ -325,10 +328,8 @@ const styles = StyleSheet.create({
     deleteButton: {
         fontSize: 16,
         fontWeight: '600',
-        color: Colors.red,
     },
     saveButton: {
-        backgroundColor: Colors.primary,
         paddingHorizontal: 20,
         paddingVertical: 8,
         borderRadius: 24,
@@ -336,7 +337,6 @@ const styles = StyleSheet.create({
     saveButtonText: {
         fontSize: 15,
         fontWeight: '700',
-        color: Colors.backgroundDark, // Dark text on primary button
     },
     inputSection: {
         marginBottom: 8,
@@ -344,7 +344,6 @@ const styles = StyleSheet.create({
     taskInput: {
         fontSize: 20,
         fontWeight: '500',
-        color: Colors.white,
         minHeight: 60,
         textAlignVertical: 'top',
         lineHeight: 28,
@@ -362,18 +361,14 @@ const styles = StyleSheet.create({
     reminderLabel: {
         fontSize: 14,
         fontWeight: '600',
-        color: Colors.primary,
     },
-    // New Card Styles
     dateDisplayCard: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        backgroundColor: Colors.white + '08', // Low opacity white
         borderRadius: 20,
         padding: 20,
         borderWidth: 1,
-        borderColor: Colors.white + '0D',
     },
     dateInfoLeft: {
         flex: 1,
@@ -381,39 +376,32 @@ const styles = StyleSheet.create({
     dateLabelText: {
         fontSize: 20,
         fontWeight: '600',
-        color: Colors.white,
         marginBottom: 4,
     },
     fullDateText: {
         fontSize: 14,
-        color: Colors.white + '80', // subtitles
     },
     timeInfoRight: {
-        backgroundColor: Colors.primary + '1A', // pill bg
         paddingHorizontal: 16,
         paddingVertical: 10,
         borderRadius: 14,
         borderWidth: 1,
-        borderColor: Colors.primary + '30',
     },
     timeLabelText: {
         fontSize: 28,
         fontWeight: '700',
-        color: Colors.primary,
         fontVariant: ['tabular-nums'],
     },
     pickerWrapper: {
-        backgroundColor: Colors.white + '05',
         borderRadius: 16,
         overflow: 'hidden',
         padding: 8,
-        marginTop: -8, // connect visual
+        marginTop: -8,
     },
     dateTimePicker: {
-        height: 340, // Ensure height for inline picker
+        height: 340,
         width: '100%',
     },
-    // Chips
     suggestionsContainer: {
         flexDirection: 'row',
         flexWrap: 'wrap',
@@ -421,12 +409,10 @@ const styles = StyleSheet.create({
         paddingVertical: 8,
     },
     suggestionChip: {
-        backgroundColor: Colors.white + '0A',
         paddingHorizontal: 16,
         paddingVertical: 14,
         borderRadius: 16,
         borderWidth: 1,
-        borderColor: Colors.white + '08',
         flexGrow: 1,
         minWidth: '45%',
         alignItems: 'center',
@@ -440,15 +426,11 @@ const styles = StyleSheet.create({
     suggestionText: {
         fontSize: 14,
         fontWeight: '500',
-        color: Colors.white,
     },
-
     existingReminderText: {
         fontSize: 14,
-        color: Colors.primary,
         fontWeight: '600',
     },
-    // New reminder container styles
     existingReminderContainer: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -460,42 +442,33 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 10,
-        backgroundColor: Colors.primary + '15',
         padding: 12,
         borderRadius: 16,
         borderWidth: 1,
-        borderColor: Colors.primary + '20',
     },
     removeReminderButton: {
         padding: 8,
-        backgroundColor: Colors.white + '08', // light bg
         borderRadius: 12,
         alignItems: 'center',
         justifyContent: 'center',
     },
     moveToTomorrowButton: {
-        backgroundColor: Colors.primary + '20',
         borderRadius: 20,
         padding: 20,
         marginTop: 8,
         borderWidth: 1.5,
-        borderColor: Colors.primary + '40',
         alignItems: 'center',
         gap: 6,
     },
-
     moveToTomorrowText: {
         fontSize: 16,
         fontWeight: '700',
-        color: Colors.primary,
         marginTop: 4,
     },
     moveToTomorrowSubtext: {
         fontSize: 13,
         fontWeight: '500',
-        color: Colors.primary + 'AA',
     },
-
 });
 
 ReminderBottomSheet.displayName = 'ReminderBottomSheet';

@@ -1,4 +1,4 @@
-import { Colors } from '@/constants/Colors';
+import { useThemeColors } from '@/hooks/useThemeColors';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import React, { useEffect, useRef } from 'react';
@@ -9,6 +9,7 @@ interface WelcomeScreenProps {
 }
 
 export default function WelcomeScreen({ onStart }: WelcomeScreenProps) {
+    const C = useThemeColors();
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const slideAnim = useRef(new Animated.Value(50)).current;
 
@@ -46,25 +47,37 @@ export default function WelcomeScreen({ onStart }: WelcomeScreenProps) {
     };
 
     return (
-        <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
+        <Animated.View style={[styles.container, { opacity: fadeAnim, backgroundColor: C.backgroundDark }]}>
             <View style={styles.content}>
                 <Animated.View style={{ transform: [{ translateY: slideAnim }] }}>
-                    <View style={styles.iconContainer}>
-                        <Ionicons name="leaf" size={64} color={Colors.primary} />
+                    <View style={[
+                        styles.iconContainer,
+                        {
+                            backgroundColor: C.primary + '15',
+                            borderColor: C.primary + '30',
+                        }
+                    ]}>
+                        <Ionicons name="leaf" size={64} color={C.primary} />
                     </View>
-                    <Text style={styles.title}>Hayatını Düzene{"\n"}Koymaya Hazır mısın?</Text>
-                    <Text style={styles.subtitle}>
+                    <Text style={[styles.title, { color: C.textLight }]}>Hayatını Düzene{"\n"}Koymaya Hazır mısın?</Text>
+                    <Text style={[styles.subtitle, { color: C.textMuted }]}>
                         Küçük adımlarla büyük hedeflere ulaş. Her gün yeni bir başlangıçtır.
                     </Text>
                 </Animated.View>
 
                 <Animated.View style={[styles.buttonContainer, { transform: [{ translateY: slideAnim }] }]}>
                     <Pressable
-                        style={styles.button}
+                        style={[
+                            styles.button,
+                            {
+                                backgroundColor: C.primary,
+                                shadowColor: C.primary,
+                            }
+                        ]}
                         onPress={handlePress}
                     >
-                        <Text style={styles.buttonText}>Evet, Başlayalım</Text>
-                        <Ionicons name="arrow-forward" size={24} color={Colors.backgroundDark} />
+                        <Text style={[styles.buttonText, { color: C.backgroundDark }]}>Evet, Başlayalım</Text>
+                        <Ionicons name="arrow-forward" size={24} color={C.backgroundDark} />
                     </Pressable>
                 </Animated.View>
             </View>
@@ -75,7 +88,6 @@ export default function WelcomeScreen({ onStart }: WelcomeScreenProps) {
 const styles = StyleSheet.create({
     container: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: Colors.backgroundDark,
         zIndex: 9999,
         justifyContent: 'center',
         alignItems: 'center',
@@ -90,25 +102,21 @@ const styles = StyleSheet.create({
         width: 120,
         height: 120,
         borderRadius: 60,
-        backgroundColor: Colors.primary + '15',
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: 32,
         alignSelf: 'center',
         borderWidth: 1,
-        borderColor: Colors.primary + '30',
     },
     title: {
         fontSize: 34,
         fontWeight: '700',
-        color: Colors.textLight,
         textAlign: 'center',
         lineHeight: 42,
         letterSpacing: -0.5,
     },
     subtitle: {
         fontSize: 17,
-        color: Colors.textMuted,
         textAlign: 'center',
         lineHeight: 26,
         marginTop: 16,
@@ -118,14 +126,12 @@ const styles = StyleSheet.create({
         marginTop: 48,
     },
     button: {
-        backgroundColor: Colors.primary,
         paddingVertical: 20,
         borderRadius: 24,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
         gap: 12,
-        shadowColor: Colors.primary,
         shadowOffset: { width: 0, height: 8 },
         shadowOpacity: 0.4,
         shadowRadius: 16,
@@ -134,6 +140,5 @@ const styles = StyleSheet.create({
     buttonText: {
         fontSize: 18,
         fontWeight: '700',
-        color: Colors.backgroundDark,
     },
 });

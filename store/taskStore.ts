@@ -35,6 +35,7 @@ export const useTaskStore = create<TaskState>()(
                             date,
                             status: 'pending',
                             createdAt: Date.now(),
+                            order: Date.now(),
                             category,
                         },
                     ],
@@ -99,14 +100,11 @@ export const useTaskStore = create<TaskState>()(
                 })),
             reorderTasks: (date, orderedTasks) =>
                 set((state) => {
-                    // Update createdAt timestamps to maintain the new order
-                    const baseTime = Date.now();
+                    // Assign sequential order values — do NOT touch createdAt
                     const updatedOrderedTasks = orderedTasks.map((task, index) => ({
                         ...task,
-                        createdAt: baseTime + index,
+                        order: index,
                     }));
-
-                    // Replace tasks for this date with the reordered ones
                     const otherTasks = state.tasks.filter((t) => t.date !== date);
                     return {
                         tasks: [...otherTasks, ...updatedOrderedTasks],

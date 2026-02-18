@@ -3,7 +3,7 @@ import DailyQuote from '@/components/DailyQuote';
 import DayView from '@/components/DayView';
 import ReminderBottomSheet from '@/components/ReminderBottomSheet';
 import WelcomeScreen from '@/components/WelcomeScreen';
-import { Colors } from '@/constants/Colors';
+import { useThemeColors } from '@/hooks/useThemeColors';
 import { useTaskStore } from '@/store/taskStore';
 import { cancelNotification, schedulePushNotification } from '@/utils/notifications';
 import BottomSheet from '@gorhom/bottom-sheet';
@@ -12,12 +12,14 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { addDays, differenceInCalendarDays, format } from 'date-fns';
 import * as Haptics from 'expo-haptics';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Modal, Platform, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import PagerView from 'react-native-pager-view';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function HomeScreen() {
+    const C = useThemeColors();
+    const colorScheme = useColorScheme();
     const [initialDate] = useState(new Date());
     const initialPage = 1000;
     const [activePage, setActivePage] = useState(initialPage);
@@ -51,7 +53,6 @@ export default function HomeScreen() {
 
     const handleTaskComplete = useCallback(async () => {
         const now = Date.now();
-        // Reset combo if more than 2 seconds passed
         if (now - lastComboTime.current < 2000) {
             comboCountRef.current += 1;
         } else {
@@ -62,7 +63,6 @@ export default function HomeScreen() {
         setComboCount(comboCountRef.current);
         setComboVisible(true);
 
-        // Haptic Feedback (increasing intensity)
         if (comboCountRef.current === 2) {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         } else if (comboCountRef.current === 3) {
@@ -71,14 +71,12 @@ export default function HomeScreen() {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         }
     }, [setComboCount, setComboVisible]);
-    // -------------------
 
     // --- Global Undo Logic ---
     const [showUndo, setShowUndo] = useState(false);
     const undoOpacity = useRef(new Animated.Value(0)).current;
 
     const handleGlobalDeleteTask = useCallback(async (id: string) => {
-        // Cancel notification if exists
         const task = tasks.find(t => t.id === id);
         if (task?.reminderId) {
             await cancelNotification(task.reminderId);
@@ -94,7 +92,6 @@ export default function HomeScreen() {
             useNativeDriver: true,
         }).start();
 
-        // Auto hide
         setTimeout(() => {
             Animated.timing(undoOpacity, {
                 toValue: 0,
@@ -112,13 +109,11 @@ export default function HomeScreen() {
             useNativeDriver: true,
         }).start(() => setShowUndo(false));
     };
-    // ------------------------
 
     const handleSheetChange = (index: number) => {
-        // -1 means closed, anything else (0, 1, etc.) means open
         if (index === -1) {
             setIsSheetOpen(false);
-            setSelectedTaskId(null); // Clean up selection when manually closed
+            setSelectedTaskId(null);
         } else {
             setIsSheetOpen(true);
         }
@@ -189,7 +184,7 @@ export default function HomeScreen() {
         }
         bottomSheetRef.current?.close();
         setSelectedTaskId(null);
-        setIsSheetOpen(false); // Force close
+        setIsSheetOpen(false);
     };
 
     const handleCancelReminder = () => {
@@ -205,7 +200,7 @@ export default function HomeScreen() {
         }
         bottomSheetRef.current?.close();
         setSelectedTaskId(null);
-        setIsSheetOpen(false); // Force close
+        setIsSheetOpen(false);
     };
 
     const handleMoveToTomorrow = async () => {
@@ -218,7 +213,6 @@ export default function HomeScreen() {
 
                 moveTaskToDate(selectedTaskId, tomorrowDateKey);
 
-                // Eğer bildirim varsa, onu da yarına taşı
                 if (task.reminderId && task.reminderDate) {
                     await cancelNotification(task.reminderId);
 
@@ -242,7 +236,7 @@ export default function HomeScreen() {
         }
         bottomSheetRef.current?.close();
         setSelectedTaskId(null);
-        setIsSheetOpen(false); // Force close
+        setIsSheetOpen(false);
     };
 
     const handleRemoveReminder = async () => {
@@ -256,7 +250,7 @@ export default function HomeScreen() {
         }
         bottomSheetRef.current?.close();
         setSelectedTaskId(null);
-        setIsSheetOpen(false); // Force close
+        setIsSheetOpen(false);
     };
 
     const selectedTask = selectedTaskId ? tasks.find(t => t.id === selectedTaskId) : null;
@@ -281,7 +275,7 @@ export default function HomeScreen() {
     }, [initialDate, initialPage, goToPage]);
 
     return (
-        <GestureHandlerRootView style={styles.container}>
+        <GestureHandlerRootView style={[styles.container, { backgroundColor: C.backgroundDark }]}>
             <SafeAreaView style={styles.safeArea}>
                 <PagerView
                     ref={pagerRef}
@@ -327,18 +321,21 @@ export default function HomeScreen() {
                             onRequestClose={() => setShowDatePicker(false)}
                         >
                             <Pressable style={styles.modalOverlay} onPress={() => setShowDatePicker(false)}>
-                                <Pressable style={styles.modalContent} onPress={e => e.stopPropagation()}>
+                                <Pressable
+                                    style={[styles.modalContent, { backgroundColor: C.sheetDark, borderColor: C.primary + '30' }]}
+                                    onPress={e => e.stopPropagation()}
+                                >
                                     <View style={styles.modalHeader}>
-                                        <Text style={styles.modalTitle}>Tarihe Git</Text>
+                                        <Text style={[styles.modalTitle, { color: C.textLight }]}>Tarihe Git</Text>
                                     </View>
                                     <DateTimePicker
                                         value={tempDate}
                                         mode="date"
                                         display="inline"
                                         onChange={handleDateSelect}
-                                        textColor={Colors.textLight}
-                                        accentColor={Colors.primary}
-                                        themeVariant="dark"
+                                        textColor={C.textLight}
+                                        accentColor={C.primary}
+                                        themeVariant={colorScheme === 'dark' ? 'dark' : 'light'}
                                         locale="tr-TR"
                                     />
                                 </Pressable>
@@ -379,10 +376,10 @@ export default function HomeScreen() {
 
             {/* Global Undo Toast */}
             {showUndo && (
-                <Animated.View style={[styles.undoContainer, { opacity: undoOpacity }]}>
-                    <Text style={styles.undoText}>Görev silindi</Text>
+                <Animated.View style={[styles.undoContainer, { opacity: undoOpacity, backgroundColor: C.cardBg }]}>
+                    <Text style={[styles.undoText, { color: C.textLight }]}>Görev silindi</Text>
                     <Pressable onPress={handleGlobalUndo}>
-                        <Text style={styles.undoButton}>Geri Al</Text>
+                        <Text style={[styles.undoButton, { color: C.primary }]}>Geri Al</Text>
                     </Pressable>
                 </Animated.View>
             )}
@@ -395,21 +392,12 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: Colors.backgroundDark,
     },
     safeArea: {
         flex: 1,
     },
     pager: {
         flex: 1,
-    },
-    calendarButton: {
-        position: 'absolute',
-        right: 24,
-        zIndex: 10,
-        padding: 8,
-        backgroundColor: Colors.backgroundDark + '80',
-        borderRadius: 20,
     },
     modalOverlay: {
         flex: 1,
@@ -418,13 +406,11 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     modalContent: {
-        backgroundColor: Colors.backgroundDark,
         borderRadius: 20,
         padding: 16,
         width: '90%',
         maxWidth: 370,
         borderWidth: 1,
-        borderColor: Colors.primary + '30',
         alignItems: 'center',
     },
     modalHeader: {
@@ -437,54 +423,32 @@ const styles = StyleSheet.create({
     modalTitle: {
         fontSize: 18,
         fontWeight: '600',
-        color: Colors.textLight,
-    },
-    modalConfirm: {
-        fontSize: 17,
-        fontWeight: '600',
-        color: Colors.primary,
-    },
-    todayButton: {
-        position: 'absolute',
-        left: 24,
-        zIndex: 10,
-        padding: 8,
-        backgroundColor: Colors.backgroundDark + '80', // semi-transparent
-        borderRadius: 20,
-    },
-    todayButtonText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: Colors.primary,
     },
     // Global Undo Styles
     undoContainer: {
         position: 'absolute',
-        bottom: 80, // Moved up to clear bottom areas
+        bottom: 80,
         alignSelf: 'center',
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        backgroundColor: '#333',
         paddingVertical: 12,
         paddingHorizontal: 20,
         borderRadius: 30,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
+        shadowOpacity: 0.2,
         shadowRadius: 8,
         elevation: 10,
         width: '90%',
         maxWidth: 340,
-        zIndex: 99999, // Super high z-index
+        zIndex: 99999,
     },
     undoText: {
-        color: '#fff',
         fontSize: 14,
         fontWeight: '500',
     },
     undoButton: {
-        color: Colors.primary,
         fontSize: 14,
         fontWeight: 'bold',
         marginLeft: 16,

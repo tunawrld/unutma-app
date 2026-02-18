@@ -8,6 +8,7 @@ export interface Task {
     date: string; // ISO Date string YYYY-MM-DD
     status: TaskStatus;
     createdAt: number;
+    order: number; // Explicit drag order index
     reminderId?: string; // Notification ID
     reminderDate?: number; // Timestamp for when the reminder triggers
     category: TaskCategory;

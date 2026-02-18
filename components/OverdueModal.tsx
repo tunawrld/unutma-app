@@ -1,4 +1,4 @@
-import { Colors } from '@/constants/Colors';
+import { useThemeColors } from '@/hooks/useThemeColors';
 import { Task } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
@@ -16,6 +16,8 @@ interface OverdueModalProps {
 }
 
 export default function OverdueModal({ visible, tasks, onClose, onMoveAllToToday, onToggleTask }: OverdueModalProps) {
+    const C = useThemeColors();
+
     if (tasks.length === 0) return null;
 
     const handleToggle = (id: string) => {
@@ -31,20 +33,26 @@ export default function OverdueModal({ visible, tasks, onClose, onMoveAllToToday
             onRequestClose={onClose}
         >
             <Pressable style={styles.overlay} onPress={onClose}>
-                <Pressable style={styles.content} onPress={e => e.stopPropagation()}>
+                <Pressable
+                    style={[
+                        styles.content,
+                        { backgroundColor: C.sheetDark, borderColor: C.border + '10' }
+                    ]}
+                    onPress={e => e.stopPropagation()}
+                >
                     <View style={styles.header}>
                         <View style={styles.headerLeft}>
-                            <View style={styles.iconBadge}>
-                                <Ionicons name="warning" size={20} color={Colors.red} />
+                            <View style={[styles.iconBadge, { backgroundColor: C.red + '15' }]}>
+                                <Ionicons name="warning" size={20} color={C.red} />
                             </View>
-                            <Text style={styles.title}>Geciken Görevler</Text>
+                            <Text style={[styles.title, { color: C.textLight }]}>Geciken Görevler</Text>
                         </View>
                         <Pressable onPress={onClose} hitSlop={10}>
-                            <Ionicons name="close" size={24} color={Colors.textMuted} />
+                            <Ionicons name="close" size={24} color={C.textMuted} />
                         </Pressable>
                     </View>
 
-                    <Text style={styles.subtitle}>
+                    <Text style={[styles.subtitle, { color: C.textMuted }]}>
                         Tamamlanmamış {tasks.length} göreviniz var. Bunları bugüne taşımak ister misiniz?
                     </Text>
 
@@ -52,19 +60,22 @@ export default function OverdueModal({ visible, tasks, onClose, onMoveAllToToday
                         {tasks.map(task => (
                             <Pressable
                                 key={task.id}
-                                style={styles.item}
+                                style={[styles.item, { backgroundColor: C.border + '05' }]}
                                 onPress={() => handleToggle(task.id)}
                             >
-                                {/* Checkbox */}
                                 <Pressable
                                     onPress={() => handleToggle(task.id)}
                                     style={[
                                         styles.checkbox,
-                                        task.status === 'completed' && styles.checkboxCompleted
+                                        { borderColor: C.textMuted + '50' },
+                                        task.status === 'completed' && {
+                                            backgroundColor: C.primary + '33',
+                                            borderColor: C.primary + '50',
+                                        }
                                     ]}
                                 >
                                     {task.status === 'completed' && (
-                                        <Ionicons name="checkmark" size={16} color={Colors.primary} />
+                                        <Ionicons name="checkmark" size={16} color={C.primary} />
                                     )}
                                 </Pressable>
 
@@ -72,13 +83,18 @@ export default function OverdueModal({ visible, tasks, onClose, onMoveAllToToday
                                     <Text
                                         style={[
                                             styles.itemText,
-                                            task.status === 'completed' && styles.itemTextCompleted
+                                            { color: C.textLight },
+                                            task.status === 'completed' && {
+                                                color: C.textMuted,
+                                                textDecorationLine: 'line-through',
+                                                textDecorationColor: C.primary + '66',
+                                            }
                                         ]}
                                         numberOfLines={1}
                                     >
                                         {task.text}
                                     </Text>
-                                    <Text style={styles.itemDate}>
+                                    <Text style={[styles.itemDate, { color: C.textMuted }]}>
                                         {format(new Date(task.date), 'd MMMM', { locale: tr })}
                                     </Text>
                                 </View>
@@ -87,9 +103,12 @@ export default function OverdueModal({ visible, tasks, onClose, onMoveAllToToday
                     </View>
 
                     <View style={styles.actions}>
-                        <Pressable style={styles.moveButton} onPress={onMoveAllToToday}>
-                            <Text style={styles.moveButtonText}>Hepsini Bugüne Taşı</Text>
-                            <Ionicons name="arrow-forward" size={16} color={Colors.white} />
+                        <Pressable
+                            style={[styles.moveButton, { backgroundColor: C.primary }]}
+                            onPress={onMoveAllToToday}
+                        >
+                            <Text style={[styles.moveButtonText, { color: C.backgroundDark }]}>Hepsini Bugüne Taşı</Text>
+                            <Ionicons name="arrow-forward" size={16} color={C.backgroundDark} />
                         </Pressable>
                     </View>
                 </Pressable>
@@ -109,11 +128,9 @@ const styles = StyleSheet.create({
     content: {
         width: '100%',
         maxWidth: 340,
-        backgroundColor: Colors.backgroundDark,
         borderRadius: 24,
         padding: 20,
         borderWidth: 1,
-        borderColor: Colors.white + '10',
         elevation: 10,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 10 },
@@ -135,32 +152,28 @@ const styles = StyleSheet.create({
         width: 32,
         height: 32,
         borderRadius: 10,
-        backgroundColor: Colors.red + '15',
         justifyContent: 'center',
         alignItems: 'center',
     },
     title: {
         fontSize: 18,
         fontWeight: '600',
-        color: Colors.white,
     },
     subtitle: {
         fontSize: 14,
-        color: Colors.textMuted,
         marginBottom: 20,
         lineHeight: 20,
     },
     list: {
         gap: 10,
         marginBottom: 24,
-        maxHeight: 200, // Limit height if many tasks
+        maxHeight: 200,
     },
     item: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 10,
         padding: 10,
-        backgroundColor: Colors.white + '05',
         borderRadius: 12,
     },
     checkbox: {
@@ -168,31 +181,19 @@ const styles = StyleSheet.create({
         height: 22,
         borderRadius: 11,
         borderWidth: 1.5,
-        borderColor: Colors.textMuted + '50',
         justifyContent: 'center',
         alignItems: 'center',
         backgroundColor: 'transparent',
-    },
-    checkboxCompleted: {
-        backgroundColor: Colors.primary + '33',
-        borderColor: Colors.primary + '50',
     },
     itemContent: {
         flex: 1,
     },
     itemText: {
         fontSize: 14,
-        color: Colors.textLight,
         fontWeight: '500',
-    },
-    itemTextCompleted: {
-        color: Colors.textMuted,
-        textDecorationLine: 'line-through',
-        textDecorationColor: Colors.primary + '66',
     },
     itemDate: {
         fontSize: 12,
-        color: Colors.textMuted,
         marginTop: 2,
     },
     actions: {
@@ -200,7 +201,6 @@ const styles = StyleSheet.create({
     },
     moveButton: {
         flex: 1,
-        backgroundColor: Colors.primary,
         borderRadius: 16,
         paddingVertical: 14,
         flexDirection: 'row',
@@ -209,9 +209,7 @@ const styles = StyleSheet.create({
         gap: 8,
     },
     moveButtonText: {
-        color: Colors.backgroundDark, // Dark text on primary button usually looks better
         fontSize: 15,
         fontWeight: '600',
     },
 });
-

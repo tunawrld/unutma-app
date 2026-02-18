@@ -1,5 +1,4 @@
 import { TaskCategory } from '@/types';
-import { Colors } from './Colors';
 
 export const CategoryConfig: {
     [key in TaskCategory]: {
@@ -30,7 +29,7 @@ export const CategoryConfig: {
     },
     none: {
         label: 'Kategori Yok',
-        color: Colors.textMuted,
+        color: '#6E6E73',
         icon: 'ellipse-outline',
     },
 };

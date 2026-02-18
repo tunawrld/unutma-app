@@ -1,5 +1,5 @@
-import { Colors } from '@/constants/Colors';
 import { MOTIVATION_QUOTES } from '@/constants/Quotes';
+import { useThemeColors } from '@/hooks/useThemeColors';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -14,6 +14,7 @@ interface StoredQuoteData {
 }
 
 export default function DailyQuote() {
+    const C = useThemeColors();
     const [quote, setQuote] = useState<string>("");
     const insets = useSafeAreaInsets();
 
@@ -23,23 +24,19 @@ export default function DailyQuote() {
 
     const loadQuote = async () => {
         try {
-            const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+            const today = new Date().toISOString().split('T')[0];
             const storedDataJson = await AsyncStorage.getItem(STORAGE_KEY);
             let storedData: StoredQuoteData | null = storedDataJson ? JSON.parse(storedDataJson) : null;
 
             if (storedData && storedData.date === today) {
-                // Already have a quote for today
                 setQuote(MOTIVATION_QUOTES[storedData.quoteIndex]);
             } else {
-                // Need a new quote
                 let shownIndices = storedData ? storedData.shownIndices : [];
 
-                // Keep history of last 30 quotes
                 if (shownIndices.length > 30) {
                     shownIndices = shownIndices.slice(shownIndices.length - 30);
                 }
 
-                // Find available indices
                 const allIndices = MOTIVATION_QUOTES.map((_, i) => i);
                 const availableIndices = allIndices.filter(i => !shownIndices.includes(i));
 
@@ -48,12 +45,10 @@ export default function DailyQuote() {
                     const randomIndex = Math.floor(Math.random() * availableIndices.length);
                     newIndex = availableIndices[randomIndex];
                 } else {
-                    // Fallback
                     newIndex = Math.floor(Math.random() * MOTIVATION_QUOTES.length);
                     shownIndices = [];
                 }
 
-                // Update storage
                 const newData: StoredQuoteData = {
                     date: today,
                     quoteIndex: newIndex,
@@ -73,7 +68,7 @@ export default function DailyQuote() {
 
     return (
         <View style={[styles.container, { bottom: insets.bottom + 15 }]}>
-            <Text style={styles.text}>{quote}</Text>
+            <Text style={[styles.text, { color: C.textMuted }]}>{quote}</Text>
         </View>
     );
 }
@@ -85,10 +80,9 @@ const styles = StyleSheet.create({
         right: 0,
         alignItems: 'center',
         paddingHorizontal: 20,
-        opacity: 0.6,
+        opacity: 0.7,
     },
     text: {
-        color: Colors.textLight,
         fontSize: 12,
         textAlign: 'center',
         fontStyle: 'italic',
