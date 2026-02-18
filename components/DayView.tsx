@@ -521,6 +521,7 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar, onTaskComp
                 onClose={() => setShowOverdueModal(false)}
                 onMoveAllToToday={handleMoveOverdueToToday}
                 onToggleTask={handleToggleTask}
+                onDeleteTask={handleDeleteWithUndo}
             />
         </KeyboardAvoidingView>
     );

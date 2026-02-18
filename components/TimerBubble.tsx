@@ -155,6 +155,8 @@ export default function TimerBubble({
                                 themeVariant="dark"
                                 locale="tr-TR"
                                 style={{ height: 120 }}
+                                minimumDate={new Date(new Date().getFullYear() - 1, 0, 1)}
+                                maximumDate={new Date(new Date().getFullYear() + 1, 11, 31)}
                             />
                         </View>
                     )}

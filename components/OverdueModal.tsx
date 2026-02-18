@@ -4,8 +4,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import * as Haptics from 'expo-haptics';
-import React from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 interface OverdueModalProps {
     visible: boolean;
@@ -13,16 +13,41 @@ interface OverdueModalProps {
     onClose: () => void;
     onMoveAllToToday: () => void;
     onToggleTask?: (id: string) => void;
+    onDeleteTask?: (id: string) => void;
 }
 
-export default function OverdueModal({ visible, tasks, onClose, onMoveAllToToday, onToggleTask }: OverdueModalProps) {
+export default function OverdueModal({ visible, tasks, onClose, onMoveAllToToday, onToggleTask, onDeleteTask }: OverdueModalProps) {
     const C = useThemeColors();
+    const [completingIds, setCompletingIds] = useState<Set<string>>(new Set());
+
+    // Reset completing status when modal closes or tasks change significantly
+    useEffect(() => {
+        if (!visible) {
+            setCompletingIds(new Set());
+        }
+    }, [visible]);
 
     if (tasks.length === 0) return null;
 
     const handleToggle = (id: string) => {
+        if (completingIds.has(id)) return;
+
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        onToggleTask?.(id);
+        setCompletingIds(prev => {
+            const next = new Set(prev);
+            next.add(id);
+            return next;
+        });
+
+        setTimeout(() => {
+            onToggleTask?.(id);
+            // Cleanup happens automatically as task is removed from list
+        }, 500);
+    };
+
+    const handleDelete = (id: string) => {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        onDeleteTask?.(id);
     };
 
     return (
@@ -56,51 +81,66 @@ export default function OverdueModal({ visible, tasks, onClose, onMoveAllToToday
                         Tamamlanmamış {tasks.length} göreviniz var. Bunları bugüne taşımak ister misiniz?
                     </Text>
 
-                    <View style={styles.list}>
-                        {tasks.map(task => (
-                            <Pressable
-                                key={task.id}
-                                style={[styles.item, { backgroundColor: C.border + '05' }]}
-                                onPress={() => handleToggle(task.id)}
-                            >
-                                <Pressable
-                                    onPress={() => handleToggle(task.id)}
-                                    style={[
-                                        styles.checkbox,
-                                        { borderColor: C.textMuted + '50' },
-                                        task.status === 'completed' && {
-                                            backgroundColor: C.primary + '33',
-                                            borderColor: C.primary + '50',
-                                        }
-                                    ]}
-                                >
-                                    {task.status === 'completed' && (
-                                        <Ionicons name="checkmark" size={16} color={C.primary} />
-                                    )}
-                                </Pressable>
+                    <ScrollView style={styles.list} contentContainerStyle={{ gap: 10 }}>
+                        {tasks.map(task => {
+                            const isCompleting = completingIds.has(task.id);
+                            const isChecked = task.status === 'completed' || isCompleting;
 
-                                <View style={styles.itemContent}>
-                                    <Text
+                            return (
+                                <View
+                                    key={task.id}
+                                    style={[styles.item, { backgroundColor: C.border + '05' }]}
+                                >
+                                    <Pressable
+                                        onPress={() => handleToggle(task.id)}
                                         style={[
-                                            styles.itemText,
-                                            { color: C.textLight },
-                                            task.status === 'completed' && {
-                                                color: C.textMuted,
-                                                textDecorationLine: 'line-through',
-                                                textDecorationColor: C.primary + '66',
+                                            styles.checkbox,
+                                            { borderColor: C.textMuted + '50' },
+                                            isChecked && {
+                                                backgroundColor: C.primary + '33',
+                                                borderColor: C.primary + '50',
                                             }
                                         ]}
-                                        numberOfLines={1}
                                     >
-                                        {task.text}
-                                    </Text>
-                                    <Text style={[styles.itemDate, { color: C.textMuted }]}>
-                                        {format(new Date(task.date), 'd MMMM', { locale: tr })}
-                                    </Text>
+                                        {isChecked && (
+                                            <Ionicons name="checkmark" size={16} color={C.primary} />
+                                        )}
+                                    </Pressable>
+
+                                    <Pressable
+                                        style={styles.itemContent}
+                                        onPress={() => handleToggle(task.id)}
+                                    >
+                                        <Text
+                                            style={[
+                                                styles.itemText,
+                                                { color: C.textLight },
+                                                isChecked && {
+                                                    color: C.textMuted,
+                                                    textDecorationLine: 'line-through',
+                                                    textDecorationColor: C.primary + '66',
+                                                }
+                                            ]}
+                                            numberOfLines={1}
+                                        >
+                                            {task.text}
+                                        </Text>
+                                        <Text style={[styles.itemDate, { color: C.textMuted }]}>
+                                            {format(new Date(task.date), 'd MMMM', { locale: tr })}
+                                        </Text>
+                                    </Pressable>
+
+                                    <Pressable
+                                        onPress={() => handleDelete(task.id)}
+                                        style={styles.deleteButton}
+                                        hitSlop={10}
+                                    >
+                                        <Ionicons name="trash-outline" size={18} color={C.red} />
+                                    </Pressable>
                                 </View>
-                            </Pressable>
-                        ))}
-                    </View>
+                            );
+                        })}
+                    </ScrollView>
 
                     <View style={styles.actions}>
                         <Pressable
@@ -165,7 +205,6 @@ const styles = StyleSheet.create({
         lineHeight: 20,
     },
     list: {
-        gap: 10,
         marginBottom: 24,
         maxHeight: 200,
     },
@@ -211,5 +250,10 @@ const styles = StyleSheet.create({
     moveButtonText: {
         fontSize: 15,
         fontWeight: '600',
+    },
+    deleteButton: {
+        padding: 8,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
 });

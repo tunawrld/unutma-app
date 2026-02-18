@@ -210,6 +210,8 @@ const ReminderBottomSheet = forwardRef<BottomSheet, ReminderBottomSheetProps>(
                                     themeVariant={colorScheme === 'dark' ? 'dark' : 'light'}
                                     locale="tr-TR"
                                     style={styles.dateTimePicker}
+                                    minimumDate={new Date(new Date().getFullYear() - 1, 0, 1)}
+                                    maximumDate={new Date(new Date().getFullYear() + 1, 11, 31)}
                                 />
                             </View>
                         )}
@@ -221,6 +223,8 @@ const ReminderBottomSheet = forwardRef<BottomSheet, ReminderBottomSheetProps>(
                                 onChange={handleDateChange}
                                 textColor={C.textLight}
                                 themeVariant={colorScheme === 'dark' ? 'dark' : 'light'}
+                                minimumDate={new Date(new Date().getFullYear() - 1, 0, 1)}
+                                maximumDate={new Date(new Date().getFullYear() + 1, 11, 31)}
                             />
                         )}
 

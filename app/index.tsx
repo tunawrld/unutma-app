@@ -328,16 +328,30 @@ export default function HomeScreen() {
                                     <View style={styles.modalHeader}>
                                         <Text style={[styles.modalTitle, { color: C.textLight }]}>Tarihe Git</Text>
                                     </View>
-                                    <DateTimePicker
-                                        value={tempDate}
-                                        mode="date"
-                                        display="inline"
-                                        onChange={handleDateSelect}
-                                        textColor={C.textLight}
-                                        accentColor={C.primary}
-                                        themeVariant={colorScheme === 'dark' ? 'dark' : 'light'}
-                                        locale="tr-TR"
-                                    />
+                                    <View style={{ position: 'relative', width: '100%' }}>
+                                        <DateTimePicker
+                                            value={tempDate}
+                                            mode="date"
+                                            display="inline"
+                                            onChange={handleDateSelect}
+                                            textColor={C.textLight}
+                                            accentColor={C.primary}
+                                            themeVariant={colorScheme === 'dark' ? 'dark' : 'light'}
+                                            locale="tr-TR"
+                                            minimumDate={new Date(new Date().getFullYear() - 1, 0, 1)}
+                                            maximumDate={new Date(new Date().getFullYear() + 1, 11, 31)}
+                                        />
+                                        {/* Overlay to block Month/Year picker tap but allow arrows */}
+                                        <Pressable
+                                            style={{
+                                                position: 'absolute',
+                                                top: 0,
+                                                left: 0,
+                                                width: '70%',
+                                                height: 50,
+                                            }}
+                                        />
+                                    </View>
                                 </Pressable>
                             </Pressable>
                         </Modal>
@@ -348,6 +362,8 @@ export default function HomeScreen() {
                             display="default"
                             onChange={handleDateSelect}
                             locale="tr-TR"
+                            minimumDate={new Date(new Date().getFullYear() - 1, 0, 1)}
+                            maximumDate={new Date(new Date().getFullYear() + 1, 11, 31)}
                         />
                     )
                 )}
