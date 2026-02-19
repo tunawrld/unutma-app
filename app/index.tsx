@@ -38,6 +38,7 @@ export default function HomeScreen() {
     const moveTaskToDate = useTaskStore((state) => state.moveTaskToDate);
     const deleteTask = useTaskStore((state) => state.deleteTask);
     const restoreLastDeletedTask = useTaskStore((state) => state.restoreLastDeletedTask);
+    const updateTask = useTaskStore((state) => state.updateTask);
 
     useEffect(() => {
         if (targetPage !== null && activePage === targetPage) {
@@ -162,23 +163,51 @@ export default function HomeScreen() {
         bottomSheetRef.current?.expand();
     }, [setSelectedTaskId, setIsSheetOpen]);
 
-    const handleSaveReminder = async (reminderDate: Date) => {
+    const handleSaveReminder = async (reminderDate: Date, taskText: string) => {
         if (selectedTaskId) {
             const task = tasks.find(t => t.id === selectedTaskId);
             if (task) {
-                if (task.reminderId) {
-                    await cancelNotification(task.reminderId);
+                // Update text if changed
+                if (taskText !== task.text) {
+                    updateTask(selectedTaskId, taskText);
                 }
-                const id = await schedulePushNotification(
-                    `Reminder: ${task.text}`,
-                    'Don\'t forget!',
-                    reminderDate
-                );
-                if (id) {
-                    setReminderId(selectedTaskId, id, reminderDate.getTime());
-                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                } else {
-                    alert("Cannot schedule reminder in the past!");
+
+                // Check if reminder needs update (date changed OR text changed for a future reminder)
+                const dateChanged = !task.reminderDate || reminderDate.getTime() !== task.reminderDate;
+                const textChanged = taskText !== task.text;
+                const isFuture = reminderDate.getTime() > Date.now();
+
+                if (dateChanged) {
+                    if (task.reminderId) {
+                        await cancelNotification(task.reminderId);
+                    }
+
+                    if (isFuture) {
+                        const id = await schedulePushNotification(
+                            `Reminder: ${taskText}`,
+                            'Don\'t forget!',
+                            reminderDate
+                        );
+                        if (id) {
+                            setReminderId(selectedTaskId, id, reminderDate.getTime());
+                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                        }
+                    } else {
+                        // Only alert if the user effectively changed the date to the past (or left it as default 'now')
+                        alert("Cannot schedule reminder in the past!");
+                    }
+                } else if (textChanged && isFuture && task.reminderId) {
+                    // Date didn't change, but text did, and it's a future reminder -> update notification content
+                    await cancelNotification(task.reminderId);
+                    const id = await schedulePushNotification(
+                        `Reminder: ${taskText}`,
+                        'Don\'t forget!',
+                        reminderDate
+                    );
+                    if (id) {
+                        setReminderId(selectedTaskId, id, reminderDate.getTime());
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    }
                 }
             }
         }

@@ -13,7 +13,7 @@ interface ReminderBottomSheetProps {
     taskText: string;
     isOpen?: boolean;
     existingDate?: number;
-    onSave: (date: Date) => void;
+    onSave: (date: Date, text: string) => void;
     onCancel: () => void;
     onDelete?: () => void;
     onMoveToTomorrow?: () => void;
@@ -52,10 +52,14 @@ const ReminderBottomSheet = forwardRef<BottomSheet, ReminderBottomSheetProps>(
 
         useEffect(() => {
             if (isOpen) {
-                setSelectedDate(new Date());
+                if (existingDate) {
+                    setSelectedDate(new Date(existingDate));
+                } else {
+                    setSelectedDate(new Date());
+                }
                 setActivePickerMode(null);
             }
-        }, [isOpen]);
+        }, [isOpen, existingDate]);
 
         useEffect(() => {
             const keyboardWillShow = Keyboard.addListener(
@@ -74,7 +78,7 @@ const ReminderBottomSheet = forwardRef<BottomSheet, ReminderBottomSheetProps>(
 
         const handleSave = () => {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            onSave(selectedDate);
+            onSave(selectedDate, taskInputText);
         };
 
         const handleMoveToTomorrow = () => {
