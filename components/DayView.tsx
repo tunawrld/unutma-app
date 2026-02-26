@@ -19,11 +19,13 @@ interface DayViewProps {
     onOpenReminder: (taskId: string, y?: number) => void;
     onGoToToday?: () => void;
     onOpenCalendar?: () => void;
-    onTaskComplete?: () => void;
+    onOpenNotes?: () => void;
+    onTaskComplete?: (taskId: string) => void;
     onDeleteTask?: (taskId: string) => void;
+    onFirstTaskAdded?: () => void;
 }
 
-function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar, onTaskComplete, onDeleteTask }: DayViewProps) {
+function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar, onOpenNotes, onTaskComplete, onDeleteTask, onFirstTaskAdded }: DayViewProps) {
     const C = useThemeColors();
     const dateKey = format(date, 'yyyy-MM-dd');
     const tasks = useTaskStore((state) => state.tasks);
@@ -51,7 +53,7 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar, onTaskComp
         toggleTaskStore(id);
 
         if (isCompleting && onTaskComplete) {
-            onTaskComplete();
+            onTaskComplete(id);
         }
     }, [tasks, setReminderId, toggleTaskStore, onTaskComplete]);
 
@@ -257,6 +259,9 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar, onTaskComp
 
         const targetDateKey = format(targetDate, 'yyyy-MM-dd');
 
+        const existingTasksCount = tasks.filter(t => t.date === targetDateKey).length;
+        const isFirstTask = existingTasksCount === 0;
+
         const taskId = addTask(finalTaskText, targetDateKey, 'none');
 
         if (reminderDate && taskId) {
@@ -275,7 +280,9 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar, onTaskComp
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setNewTaskText('');
 
-        if (differenceInCalendarDays(targetDate, date) !== 0) {
+        if (isFirstTask) {
+            onFirstTaskAdded?.();
+        } else if (differenceInCalendarDays(targetDate, date) !== 0) {
             const dateStr = format(targetDate, 'd MMMM EEEE', { locale: tr });
             Alert.alert(
                 "Planlandı 📅",
@@ -399,21 +406,34 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar, onTaskComp
                 <Text style={[styles.title, { color: C.textLight }]}>{headerTitle}</Text>
                 <Text style={[styles.dateText, { color: C.textMuted }]}>{dateDisplay}</Text>
 
-                {overdueTasks.length > 0 && (
+                <View style={{ position: 'absolute', right: 24, top: 23, zIndex: 10, flexDirection: 'row', gap: 10, alignItems: 'center' }}>
                     <Pressable
-                        style={styles.overdueButton}
                         onPress={() => {
                             Haptics.selectionAsync();
-                            setShowOverdueModal(true);
+                            onOpenNotes?.();
                         }}
+                        hitSlop={12}
+                        style={{ marginRight: -4 }}
                     >
-                        <Ionicons name="time-outline" size={24} color={C.textLight} />
+                        <Ionicons name="document-text-outline" size={24} color={C.textLight} />
                     </Pressable>
-                )}
 
-                <Pressable style={styles.calendarButton} onPress={onOpenCalendar}>
-                    <Ionicons name="calendar-outline" size={24} color={C.textLight} />
-                </Pressable>
+                    {overdueTasks.length > 0 && (
+                        <Pressable
+                            onPress={() => {
+                                Haptics.selectionAsync();
+                                setShowOverdueModal(true);
+                            }}
+                            hitSlop={12}
+                        >
+                            <Ionicons name="time-outline" size={24} color={C.textLight} />
+                        </Pressable>
+                    )}
+
+                    <Pressable onPress={onOpenCalendar} hitSlop={12}>
+                        <Ionicons name="calendar-outline" size={24} color={C.textLight} />
+                    </Pressable>
+                </View>
             </View>
 
             <View style={{ flex: 1 }}>
@@ -597,18 +617,6 @@ const styles = StyleSheet.create({
     input: {
         fontSize: 17,
         fontWeight: '400',
-    },
-    calendarButton: {
-        position: 'absolute',
-        right: 24,
-        top: 23,
-        zIndex: 10,
-    },
-    overdueButton: {
-        position: 'absolute',
-        right: 64,
-        top: 23,
-        zIndex: 10,
     },
     goToTodayButton: {
         position: 'absolute',

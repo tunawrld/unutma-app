@@ -84,3 +84,29 @@ export async function manageDailyMotivationalReminder(hasPendingTasks: boolean) 
         await Notifications.cancelScheduledNotificationAsync(IDENTIFIER);
     }
 }
+
+export async function manageWeeklyPlanningReminder() {
+    const IDENTIFIER = 'weekly-planning';
+
+    // Check if already scheduled to avoid duplicates/overwrite calls unnecessarily
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    const isScheduled = scheduled.some(notif => notif.identifier === IDENTIFIER);
+
+    if (!isScheduled) {
+        await Notifications.scheduleNotificationAsync({
+            identifier: IDENTIFIER,
+            content: {
+                title: "Haftanı planlamaya hazır mısın? 📅",
+                body: "Yeni bir hafta başlıyor! Hedeflerini belirle ve harika bir hafta geçir. 🚀",
+                sound: 'default',
+            },
+            trigger: {
+                type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
+                weekday: 1, // Sunday (1 in Expo Calendar Trigger)
+                hour: 19,   // 19:00
+                minute: 0,
+                repeats: true,
+            },
+        });
+    }
+}

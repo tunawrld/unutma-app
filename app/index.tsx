@@ -1,11 +1,13 @@
 import ComboOverlay from '@/components/ComboOverlay';
 import DailyQuote from '@/components/DailyQuote';
 import DayView from '@/components/DayView';
+import FirstTaskOverlay from '@/components/FirstTaskOverlay';
+import PermanentNotesModal from '@/components/PermanentNotesModal';
 import ReminderBottomSheet from '@/components/ReminderBottomSheet';
 import WelcomeScreen from '@/components/WelcomeScreen';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { useTaskStore } from '@/store/taskStore';
-import { cancelNotification, manageDailyMotivationalReminder, schedulePushNotification } from '@/utils/notifications';
+import { cancelNotification, manageDailyMotivationalReminder, manageWeeklyPlanningReminder, schedulePushNotification } from '@/utils/notifications';
 import BottomSheet from '@gorhom/bottom-sheet';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -25,10 +27,12 @@ export default function HomeScreen() {
     const initialPage = 1000;
     const [activePage, setActivePage] = useState(initialPage);
     const bottomSheetRef = useRef<BottomSheet>(null);
+    const notesSheetRef = useRef<BottomSheet>(null);
     const pagerRef = useRef<PagerView>(null);
     const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [isSheetOpen, setIsSheetOpen] = useState(false);
+    const [isNotesOpen, setIsNotesOpen] = useState(false);
     const [isFirstLaunch, setIsFirstLaunch] = useState<boolean | null>(null);
     const [tempDate, setTempDate] = useState(new Date());
     const [targetPage, setTargetPage] = useState<number | null>(null);
@@ -52,14 +56,31 @@ export default function HomeScreen() {
     const [comboVisible, setComboVisible] = useState(false);
     const lastComboTime = useRef(0);
     const comboCountRef = useRef(0);
+    const completedTaskIdsComboRef = useRef<Set<string>>(new Set());
 
-    const handleTaskComplete = useCallback(async () => {
+    // --- FIRST TASK LOGIC ---
+    const [firstTaskVisible, setFirstTaskVisible] = useState(false);
+    const handleFirstTaskAdded = useCallback(() => {
+        setFirstTaskVisible(true);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }, []);
+
+    const handleTaskComplete = useCallback(async (taskId: string) => {
         const now = Date.now();
-        if (now - lastComboTime.current < 2000) {
-            comboCountRef.current += 1;
-        } else {
-            comboCountRef.current = 1;
+
+        // Reset if time expired
+        if (now - lastComboTime.current >= 2000) {
+            comboCountRef.current = 0;
+            completedTaskIdsComboRef.current.clear();
         }
+
+        // Prevent identical tasks from incrementing the combo
+        if (completedTaskIdsComboRef.current.has(taskId)) {
+            return;
+        }
+
+        completedTaskIdsComboRef.current.add(taskId);
+        comboCountRef.current += 1;
         lastComboTime.current = now;
 
         setComboCount(comboCountRef.current);
@@ -135,6 +156,9 @@ export default function HomeScreen() {
                 );
 
                 for (const notif of scheduled) {
+                    if (notif.identifier === 'daily-motivational' || notif.identifier === 'weekly-planning') {
+                        continue;
+                    }
                     if (!validIds.has(notif.identifier)) {
                         await Notifications.cancelScheduledNotificationAsync(notif.identifier);
                     }
@@ -145,6 +169,7 @@ export default function HomeScreen() {
         };
 
         syncNotifications();
+        manageWeeklyPlanningReminder();
 
         const subscription = AppState.addEventListener('change', nextAppState => {
             if (nextAppState === 'active') {
@@ -371,8 +396,13 @@ export default function HomeScreen() {
                                     setShowDatePicker(true);
                                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                                 }}
+                                onOpenNotes={() => {
+                                    setIsNotesOpen(true);
+                                    notesSheetRef.current?.expand();
+                                }}
                                 onTaskComplete={handleTaskComplete}
                                 onDeleteTask={handleGlobalDeleteTask}
+                                onFirstTaskAdded={handleFirstTaskAdded}
                             />
                         );
                     })}
@@ -456,6 +486,11 @@ export default function HomeScreen() {
                 onAnimationFinish={() => setComboVisible(false)}
             />
 
+            <FirstTaskOverlay
+                visible={firstTaskVisible}
+                onAnimationFinish={() => setFirstTaskVisible(false)}
+            />
+
             {/* Global Undo Toast */}
             {showUndo && (
                 <Animated.View style={[styles.undoContainer, { opacity: undoOpacity, backgroundColor: C.cardBg }]}>
@@ -467,6 +502,12 @@ export default function HomeScreen() {
             )}
 
             {isFirstLaunch && <WelcomeScreen onStart={handleWelcomeComplete} />}
+
+            <PermanentNotesModal
+                ref={notesSheetRef}
+                isOpen={isNotesOpen}
+                onClose={() => setIsNotesOpen(false)}
+            />
         </GestureHandlerRootView>
     );
 }
