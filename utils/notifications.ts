@@ -56,3 +56,31 @@ export async function schedulePushNotification(title: string, body: string, trig
 export async function cancelNotification(id: string) {
     await Notifications.cancelScheduledNotificationAsync(id);
 }
+
+export async function manageDailyMotivationalReminder(hasPendingTasks: boolean) {
+    const IDENTIFIER = 'daily-motivational';
+
+    if (hasPendingTasks) {
+        const now = new Date();
+        const triggerDate = new Date();
+        triggerDate.setHours(19, 0, 0, 0); // 19:00
+
+        if (triggerDate.getTime() > now.getTime()) {
+            // Check if already scheduled today to avoid re-scheduling continuously (though using same IDENTIFIER overwrites)
+            await Notifications.scheduleNotificationAsync({
+                identifier: IDENTIFIER,
+                content: {
+                    title: "Bugünü harika bitirmeye ne dersin? 🌟",
+                    body: "Birkaç görevin kalmış, hemen hallet ve rahatla! 💪",
+                    sound: 'default',
+                },
+                trigger: {
+                    date: triggerDate,
+                    type: Notifications.SchedulableTriggerInputTypes.DATE,
+                },
+            });
+        }
+    } else {
+        await Notifications.cancelScheduledNotificationAsync(IDENTIFIER);
+    }
+}

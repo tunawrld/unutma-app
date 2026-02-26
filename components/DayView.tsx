@@ -262,8 +262,8 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar, onTaskComp
         if (reminderDate && taskId) {
             if (reminderDate > new Date()) {
                 const notifId = await schedulePushNotification(
-                    `Hatırlatıcı: ${finalTaskText}`,
-                    'Unutma!',
+                    `Unutma: ${finalTaskText}`,
+                    'Görevin tamamlanmayı bekliyor! 🚀',
                     reminderDate
                 );
                 if (notifId) {

@@ -347,7 +347,8 @@ const styles = StyleSheet.create({
         fontWeight: '700',
     },
     inputSection: {
-        marginBottom: 8,
+        marginTop: 40,
+        marginBottom: 16,
     },
     taskInput: {
         fontSize: 20,

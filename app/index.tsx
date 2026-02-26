@@ -5,14 +5,15 @@ import ReminderBottomSheet from '@/components/ReminderBottomSheet';
 import WelcomeScreen from '@/components/WelcomeScreen';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { useTaskStore } from '@/store/taskStore';
-import { cancelNotification, schedulePushNotification } from '@/utils/notifications';
+import { cancelNotification, manageDailyMotivationalReminder, schedulePushNotification } from '@/utils/notifications';
 import BottomSheet from '@gorhom/bottom-sheet';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { addDays, differenceInCalendarDays, format } from 'date-fns';
 import * as Haptics from 'expo-haptics';
+import * as Notifications from 'expo-notifications';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, Modal, Platform, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { Animated, AppState, Modal, Platform, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import PagerView from 'react-native-pager-view';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -122,7 +123,43 @@ export default function HomeScreen() {
 
     useEffect(() => {
         checkFirstLaunch();
+
+        const syncNotifications = async () => {
+            try {
+                const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+                const currentTasks = useTaskStore.getState().tasks;
+                const validIds = new Set(
+                    currentTasks
+                        .filter(t => t.status === 'pending' && t.reminderId)
+                        .map(t => t.reminderId)
+                );
+
+                for (const notif of scheduled) {
+                    if (!validIds.has(notif.identifier)) {
+                        await Notifications.cancelScheduledNotificationAsync(notif.identifier);
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to sync notifications", e);
+            }
+        };
+
+        syncNotifications();
+
+        const subscription = AppState.addEventListener('change', nextAppState => {
+            if (nextAppState === 'active') {
+                syncNotifications();
+            }
+        });
+
+        return () => subscription.remove();
     }, []);
+
+    useEffect(() => {
+        const todayKey = format(new Date(), 'yyyy-MM-dd');
+        const hasPendingForTodayOrPast = tasks.some(t => t.status === 'pending' && t.date <= todayKey);
+        manageDailyMotivationalReminder(hasPendingForTodayOrPast);
+    }, [tasks]);
 
     const checkFirstLaunch = async () => {
         try {
@@ -184,8 +221,8 @@ export default function HomeScreen() {
 
                     if (isFuture) {
                         const id = await schedulePushNotification(
-                            `Reminder: ${taskText}`,
-                            'Don\'t forget!',
+                            `Unutma: ${taskText}`,
+                            'Görevin tamamlanmayı bekliyor! 🚀',
                             reminderDate
                         );
                         if (id) {
@@ -200,8 +237,8 @@ export default function HomeScreen() {
                     // Date didn't change, but text did, and it's a future reminder -> update notification content
                     await cancelNotification(task.reminderId);
                     const id = await schedulePushNotification(
-                        `Reminder: ${taskText}`,
-                        'Don\'t forget!',
+                        `Unutma: ${taskText}`,
+                        'Görevin tamamlanmayı bekliyor! 🚀',
                         reminderDate
                     );
                     if (id) {
@@ -250,8 +287,8 @@ export default function HomeScreen() {
 
                     if (newReminderDate > new Date()) {
                         const newNotifId = await schedulePushNotification(
-                            `Hatırlatıcı: ${task.text}`,
-                            'Unutma!',
+                            `Unutma: ${task.text}`,
+                            'Görevin tamamlanmayı bekliyor! 🚀',
                             newReminderDate
                         );
                         if (newNotifId) {
