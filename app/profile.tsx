@@ -2,6 +2,7 @@ import { useThemeColors } from '@/hooks/useThemeColors';
 import { getProfile, Profile, upsertProfile } from '@/lib/supabase';
 import { useAuth, useUser } from '@clerk/expo';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
@@ -38,6 +39,16 @@ export default function ProfileScreen() {
         if (!user) return;
         setLoading(true);
         try {
+            // Çevrimdışı senaryosu için önce Local Storage'dan (Önbellek) yüklemeyi dene
+            const cachedProfileString = await AsyncStorage.getItem(`profile_${user.id}`);
+            if (cachedProfileString) {
+                const cachedProfile = JSON.parse(cachedProfileString);
+                setProfile(cachedProfile);
+                setFullName(cachedProfile.full_name || '');
+                setUsername(cachedProfile.username || '');
+            }
+
+            // İnternet varsa veriyi güncelle (senkronize et)
             const token = await getToken({ template: 'supabase' });
             if (!token) throw new Error('Could not get Clerk token for Supabase');
 
@@ -57,9 +68,15 @@ export default function ProfileScreen() {
                 setProfile(existingProfile);
                 setFullName(existingProfile.full_name || '');
                 setUsername(existingProfile.username || '');
+                // İnternetten çekilen en güncel veriyi Local Storage'a kaydet (internetsiz anlar için)
+                await AsyncStorage.setItem(`profile_${user.id}`, JSON.stringify(existingProfile));
             }
-        } catch (error) {
-            console.error('Error loading profile:', error);
+        } catch (error: any) {
+            console.warn('Network / Offline hatası yakalandı. Local veriler kullanılmaya devam ediliyor:', error.message || error);
+            // Zaten local storage'dan veri çekebildiysek sorun yok, ama çekemediysek clerk verilerini göster
+            if (!profile) {
+                setFullName(user.fullName || user.firstName || '');
+            }
         } finally {
             setLoading(false);
         }
