@@ -24,8 +24,7 @@ export default function ProfileScreen() {
 
     const [profile, setProfile] = useState<Profile | null>(null);
     const [fullName, setFullName] = useState('');
-    const [username, setUsername] = useState('');
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);  // false olarak baslatildi
     const [saving, setSaving] = useState(false);
     const [editing, setEditing] = useState(false);
 
@@ -37,6 +36,9 @@ export default function ProfileScreen() {
 
     const loadProfile = async () => {
         if (!user) return;
+
+        // Eger onceden yuklenmis (ya da cached) profil yoksa ekranda sadece ufak bir spinner veya eski data donar/kalir
+        // Ekleyecegimiz isLoading arka planda kullanacak.
         setLoading(true);
         try {
             // Çevrimdışı senaryosu için önce Local Storage'dan (Önbellek) yüklemeyi dene
@@ -45,7 +47,6 @@ export default function ProfileScreen() {
                 const cachedProfile = JSON.parse(cachedProfileString);
                 setProfile(cachedProfile);
                 setFullName(cachedProfile.full_name || '');
-                setUsername(cachedProfile.username || '');
             }
 
             // İnternet varsa veriyi güncelle (senkronize et)
@@ -67,7 +68,6 @@ export default function ProfileScreen() {
             if (existingProfile) {
                 setProfile(existingProfile);
                 setFullName(existingProfile.full_name || '');
-                setUsername(existingProfile.username || '');
                 // İnternetten çekilen en güncel veriyi Local Storage'a kaydet (internetsiz anlar için)
                 await AsyncStorage.setItem(`profile_${user.id}`, JSON.stringify(existingProfile));
             }
@@ -92,7 +92,6 @@ export default function ProfileScreen() {
             const updated = await upsertProfile(token, {
                 id: user.id,
                 full_name: fullName.trim() || null,
-                username: username.trim() || null,
             });
 
             if (updated) {
@@ -108,7 +107,7 @@ export default function ProfileScreen() {
         } finally {
             setSaving(false);
         }
-    }, [user, fullName, username]);
+    }, [user, fullName]);
 
     const handleSignOut = useCallback(async () => {
         Alert.alert(
@@ -130,13 +129,7 @@ export default function ProfileScreen() {
 
     const styles = makeStyles(colors);
 
-    if (loading) {
-        return (
-            <View style={[styles.container, styles.centered]}>
-                <ActivityIndicator size="large" color={colors.primary} />
-            </View>
-        );
-    }
+
 
     return (
         <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -154,13 +147,13 @@ export default function ProfileScreen() {
                 <View style={styles.avatarContainer}>
                     <View style={styles.avatar}>
                         <Text style={styles.avatarText}>
-                            {(fullName || user?.firstName || user?.emailAddresses[0]?.emailAddress || '?')[0].toUpperCase()}
+                            {(fullName || user?.fullName || user?.firstName || user?.emailAddresses[0]?.emailAddress || '?')[0].toUpperCase()}
                         </Text>
                     </View>
                     <View style={styles.onlineDot} />
                 </View>
                 <Text style={styles.displayName}>
-                    {fullName || user?.firstName || 'Kullanıcı'}
+                    {fullName || user?.fullName || user?.firstName || 'Kullanıcı'}
                 </Text>
                 <Text style={styles.emailText}>
                     {user?.emailAddresses[0]?.emailAddress || ''}
@@ -170,16 +163,6 @@ export default function ProfileScreen() {
             {/* Profile Form */}
             <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Profil Bilgileri</Text>
-
-                <View style={styles.fieldContainer}>
-                    <Text style={styles.fieldLabel}>Email</Text>
-                    <View style={styles.fieldValueContainer}>
-                        <Ionicons name="mail-outline" size={18} color={colors.textMuted} />
-                        <Text style={styles.fieldValueDisabled}>
-                            {user?.emailAddresses[0]?.emailAddress || '-'}
-                        </Text>
-                    </View>
-                </View>
 
                 <View style={styles.fieldContainer}>
                     <Text style={styles.fieldLabel}>Ad Soyad</Text>
@@ -197,34 +180,22 @@ export default function ProfileScreen() {
                     ) : (
                         <View style={styles.fieldValueContainer}>
                             <Ionicons name="person-outline" size={18} color={colors.textMuted} />
-                            <Text style={styles.fieldValue}>{fullName || '-'}</Text>
+                            <Text style={styles.fieldValue}>{fullName || user?.fullName || user?.firstName || '-'}</Text>
                         </View>
                     )}
                 </View>
 
                 <View style={styles.fieldContainer}>
-                    <Text style={styles.fieldLabel}>Kullanıcı Adı</Text>
-                    {editing ? (
-                        <View style={styles.editInputContainer}>
-                            <Ionicons name="at-outline" size={18} color={colors.textMuted} />
-                            <TextInput
-                                style={styles.editInput}
-                                value={username}
-                                onChangeText={setUsername}
-                                placeholder="kullaniciadi"
-                                placeholderTextColor={colors.textMuted}
-                                autoCapitalize="none"
-                            />
-                        </View>
-                    ) : (
-                        <View style={styles.fieldValueContainer}>
-                            <Ionicons name="at-outline" size={18} color={colors.textMuted} />
-                            <Text style={styles.fieldValue}>
-                                {username ? `@${username}` : '-'}
-                            </Text>
-                        </View>
-                    )}
+                    <Text style={styles.fieldLabel}>Email</Text>
+                    <View style={styles.fieldValueContainer}>
+                        <Ionicons name="mail-outline" size={18} color={colors.textMuted} />
+                        <Text style={styles.fieldValueDisabled}>
+                            {user?.emailAddresses[0]?.emailAddress || '-'}
+                        </Text>
+                    </View>
                 </View>
+
+
 
                 {editing ? (
                     <View style={styles.editButtons}>
@@ -233,7 +204,6 @@ export default function ProfileScreen() {
                             onPress={() => {
                                 setEditing(false);
                                 setFullName(profile?.full_name || '');
-                                setUsername(profile?.username || '');
                             }}
                         >
                             <Text style={styles.cancelButtonText}>İptal</Text>
