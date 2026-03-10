@@ -14,6 +14,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { addDays, differenceInCalendarDays, format } from 'date-fns';
 import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
+import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, AppState, Modal, Platform, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -22,6 +23,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 export default function HomeScreen() {
     const C = useThemeColors();
+    const router = useRouter();
     const colorScheme = useColorScheme();
     const [initialDate] = useState(new Date());
     const initialPage = 1000;
@@ -400,6 +402,7 @@ export default function HomeScreen() {
                                     setIsNotesOpen(true);
                                     notesSheetRef.current?.expand();
                                 }}
+                                onOpenProfile={() => router.push('/profile')}
                                 onTaskComplete={handleTaskComplete}
                                 onDeleteTask={handleGlobalDeleteTask}
                                 onFirstTaskAdded={handleFirstTaskAdded}

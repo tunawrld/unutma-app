@@ -20,12 +20,13 @@ interface DayViewProps {
     onGoToToday?: () => void;
     onOpenCalendar?: () => void;
     onOpenNotes?: () => void;
+    onOpenProfile?: () => void;
     onTaskComplete?: (taskId: string) => void;
     onDeleteTask?: (taskId: string) => void;
     onFirstTaskAdded?: () => void;
 }
 
-function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar, onOpenNotes, onTaskComplete, onDeleteTask, onFirstTaskAdded }: DayViewProps) {
+function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar, onOpenNotes, onOpenProfile, onTaskComplete, onDeleteTask, onFirstTaskAdded }: DayViewProps) {
     const C = useThemeColors();
     const dateKey = format(date, 'yyyy-MM-dd');
     const tasks = useTaskStore((state) => state.tasks);
@@ -407,6 +408,17 @@ function DayView({ date, onOpenReminder, onGoToToday, onOpenCalendar, onOpenNote
                 <Text style={[styles.dateText, { color: C.textMuted }]}>{dateDisplay}</Text>
 
                 <View style={{ position: 'absolute', right: 24, top: 23, zIndex: 10, flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+                    <Pressable
+                        onPress={() => {
+                            Haptics.selectionAsync();
+                            onOpenProfile?.();
+                        }}
+                        hitSlop={12}
+                        style={{ marginRight: -4 }}
+                    >
+                        <Ionicons name="person-circle-outline" size={24} color={C.textLight} />
+                    </Pressable>
+
                     <Pressable
                         onPress={() => {
                             Haptics.selectionAsync();
